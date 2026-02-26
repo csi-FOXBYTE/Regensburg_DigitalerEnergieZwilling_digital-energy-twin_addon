@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: digital-energy-twin-admin
+  labels:
+    app: digital-energy-twin-admin
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: digital-energy-twin-admin
+  template:
+    metadata:
+      labels:
+        app: digital-energy-twin-admin
+    spec:
+      containers:
+        - name: admin
+          image: "{{ digital_energy_twin_admin_image }}"
+          imagePullPolicy: Always
+          ports:
+            - containerPort: {{ digital_energy_twin_admin_port | int }}
+          volumeMounts:
+            - name: placeholder-content
+              mountPath: /usr/share/nginx/html/index.html
+              subPath: admin-index.html
+      volumes:
+        - name: placeholder-content
+          configMap:
+            name: digital-energy-twin-placeholder

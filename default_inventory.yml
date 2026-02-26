@@ -7,10 +7,17 @@ all:
   children:
     controller:
       vars:
-        inv_addons:
+        inv_cust:
           digital-energy-twin:
             enable: true
-            enable_ingress: true
             ns_create: true
-            ns_name: "{{ ENVIRONMENT }}--stack"
-            ns_kubeconfig: "{{ kubeconfig_file }}"
+            ns_name: "{{ ((inv_access | default({})).apisix | default({})).ns_name | default('apisix') }}"
+            ns_kubeconfig: "{{ kubeconfig_file | default('kubeconfig') }}"
+            public_requires_login: true
+            oidc_client_id: "digital-energy-twin"
+            admin_host: "admin.det.{{ DOMAIN }}"
+            public_host: "det.{{ DOMAIN }}"
+            backend_host: "api.det.{{ DOMAIN }}"
+            admin_image: "nginx:alpine"
+            public_image: "ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_frontend:dev"
+            backend_image: "nginx:alpine"

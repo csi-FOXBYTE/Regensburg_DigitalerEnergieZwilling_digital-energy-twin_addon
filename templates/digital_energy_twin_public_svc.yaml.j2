@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: "{{ digital_energy_twin_public_service_name }}"
+  labels:
+    app: digital-energy-twin-public
+spec:
+  type: ClusterIP
+  selector:
+    app: digital-energy-twin-public
+  ports:
+    - name: http
+      port: 80
+      targetPort: {{ digital_energy_twin_public_port | int }}

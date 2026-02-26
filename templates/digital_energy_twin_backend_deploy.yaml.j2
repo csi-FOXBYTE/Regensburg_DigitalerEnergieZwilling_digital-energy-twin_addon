@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: digital-energy-twin-backend
+  labels:
+    app: digital-energy-twin-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: digital-energy-twin-backend
+  template:
+    metadata:
+      labels:
+        app: digital-energy-twin-backend
+    spec:
+      containers:
+        - name: backend
+          image: "{{ digital_energy_twin_backend_image }}"
+          imagePullPolicy: Always
+          ports:
+            - containerPort: {{ digital_energy_twin_backend_port | int }}

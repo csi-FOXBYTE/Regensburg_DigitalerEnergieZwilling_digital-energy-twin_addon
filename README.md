@@ -13,10 +13,9 @@ Add the corresponding addon settings to your inventory.
 Activate the addon in your inventory by adding the following snippet:
 
 ```yaml
-inv_addons:
-  import: true
-  addons:
-    - 'addons/digital-energy-twin_addon/tasks.yml'
+inv_cust:
+  digital-energy-twin:
+    enable: true
 ```
 
 Default values will be used from [default_inventory.yml](default_inventory.yml) and can be overwritten from your inventory.

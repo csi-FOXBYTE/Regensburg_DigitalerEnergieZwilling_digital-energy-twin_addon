@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: digital-energy-twin-public
+  labels:
+    app: digital-energy-twin-public
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: digital-energy-twin-public
+  template:
+    metadata:
+      labels:
+        app: digital-energy-twin-public
+    spec:
+      containers:
+        - name: public
+          image: "{{ digital_energy_twin_public_image }}"
+          imagePullPolicy: Always
+          ports:
+            - containerPort: {{ digital_energy_twin_public_port | int }}

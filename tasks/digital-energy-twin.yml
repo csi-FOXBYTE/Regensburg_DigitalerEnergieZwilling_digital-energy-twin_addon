@@ -1,22 +1,532 @@
 ---
-- name: Set default facts for K8S
-  ansible.builtin.set_fact:
-    k8s_config: "{{ K8S_KUBECONFIG_PATH }}/{{ inv_addons.digital-energy-twin.ns_kubeconfig }}"
-    k8s_context: "{{ inv_k8s.config.context }}"
-    k8s_namespace: "{{ inv_addons.digital-energy-twin.ns_name }}"
+- name: "Digital Energy Twin: Load config"
+  set_fact:
+    digital_energy_twin: "{{ inv_cust['digital-energy-twin'] }}"
 
-- name: "Create namespace {{ k8s_namespace }}"
+- name: "Digital Energy Twin: Validate required config"
+  ansible.builtin.assert:
+    that:
+      - digital_energy_twin.enable is defined
+      - digital_energy_twin.ns_name is defined
+      - digital_energy_twin.ns_kubeconfig is defined
+      - digital_energy_twin.public_requires_login is defined
+      - digital_energy_twin.oidc_client_id is defined
+      - digital_energy_twin.admin_host is defined
+      - digital_energy_twin.public_host is defined
+      - digital_energy_twin.backend_host is defined
+      - digital_energy_twin.admin_image is defined
+      - digital_energy_twin.public_image is defined
+      - digital_energy_twin.backend_image is defined
+    fail_msg: >-
+      Missing required keys in inv_cust['digital-energy-twin'].
+      Expected: enable, ns_name, ns_kubeconfig, public_requires_login, oidc_client_id,
+      admin_host, public_host, backend_host, admin_image, public_image, backend_image.
+
+- name: "Digital Energy Twin: Set defaults"
+  set_fact:
+    digital_energy_twin_enabled: "{{ digital_energy_twin.enable | bool }}"
+    digital_energy_twin_namespace: "{{ digital_energy_twin.ns_name }}"
+    digital_energy_twin_oidc_callback_path: "/oidc/callback"
+    digital_energy_twin_public_requires_login: "{{ digital_energy_twin.public_requires_login | bool }}"
+    digital_energy_twin_oidc_client_id: "{{ digital_energy_twin.oidc_client_id }}"
+    digital_energy_twin_admin_direct_host: "{{ digital_energy_twin.admin_host }}"
+    digital_energy_twin_public_direct_host: "{{ digital_energy_twin.public_host }}"
+    digital_energy_twin_backend_direct_host: "{{ digital_energy_twin.backend_host }}"
+    digital_energy_twin_backend_image: "{{ digital_energy_twin.backend_image }}"
+    digital_energy_twin_admin_image: "{{ digital_energy_twin.admin_image }}"
+    digital_energy_twin_public_image: "{{ digital_energy_twin.public_image }}"
+    digital_energy_twin_backend_port: 80
+    digital_energy_twin_admin_port: 80
+    digital_energy_twin_public_port: 80
+
+- name: "Digital Energy Twin: Set service names"
+  set_fact:
+    digital_energy_twin_admin_service_name: "{{ digital_energy_twin_admin_direct_host | replace('.', '-') }}"
+    digital_energy_twin_public_service_name: "{{ digital_energy_twin_public_direct_host | replace('.', '-') }}"
+    digital_energy_twin_backend_service_name: "{{ digital_energy_twin_backend_direct_host | replace('.', '-') }}"
+
+- name: "Digital Energy Twin: Resolve upstreams"
+  set_fact:
+    digital_energy_twin_admin_upstream_host: "{{ digital_energy_twin_admin_service_name }}"
+    digital_energy_twin_admin_upstream_port: "{{ digital_energy_twin_admin_port }}"
+    digital_energy_twin_public_upstream_host: "{{ digital_energy_twin_public_service_name }}"
+    digital_energy_twin_public_upstream_port: "{{ digital_energy_twin_public_port }}"
+    digital_energy_twin_backend_upstream_host: "{{ digital_energy_twin_backend_service_name }}"
+    digital_energy_twin_backend_upstream_port: "{{ digital_energy_twin_backend_port }}"
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Set default facts for K8S"
+  ansible.builtin.set_fact:
+    k8s_config: "{{ K8S_KUBECONFIG_PATH }}/{{ digital_energy_twin.ns_kubeconfig }}"
+    k8s_context: "{{ inv_k8s.config.context }}"
+    k8s_namespace: "{{ digital_energy_twin_namespace }}"
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Ensure placeholder content configmap"
   kubernetes.core.k8s:
     state: present
     kubeconfig: "{{ k8s_config }}"
     context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
     definition:
-      api_version: v1
-      kind: Namespace
+      apiVersion: v1
+      kind: ConfigMap
       metadata:
-        name: "{{ k8s_namespace }}"
-        labels:
-          name: "{{ k8s_namespace }}"
-  when: inv_addons.digital-energy-twin.ns_create
+        name: digital-energy-twin-placeholder
+      data:
+        admin-index.html: |
+          <!doctype html>
+          <html>
+            <head><meta charset="utf-8"><title>Digital Energy Twin Admin</title></head>
+            <body><h1>hello world</h1><p>admin client</p></body>
+          </html>
+        public-index.html: |
+          <!doctype html>
+          <html>
+            <head><meta charset="utf-8"><title>Digital Energy Twin Public</title></head>
+            <body><h1>hello world</h1><p>public client</p></body>
+          </html>
+  when: digital_energy_twin_enabled
 
+- name: "Digital Energy Twin: Ensure admin deployment"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition: "{{ lookup('template', addon_dir + 'templates/digital_energy_twin_admin_deploy.yaml.j2') | from_yaml }}"
+  when: digital_energy_twin_enabled
 
+- name: "Digital Energy Twin: Ensure admin service"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition: "{{ lookup('template', addon_dir + 'templates/digital_energy_twin_admin_svc.yaml.j2') | from_yaml }}"
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Ensure public deployment"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition: "{{ lookup('template', addon_dir + 'templates/digital_energy_twin_public_deploy.yaml.j2') | from_yaml }}"
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Ensure public service"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition: "{{ lookup('template', addon_dir + 'templates/digital_energy_twin_public_svc.yaml.j2') | from_yaml }}"
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Ensure backend deployment"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition: "{{ lookup('template', addon_dir + 'templates/digital_energy_twin_backend_deploy.yaml.j2') | from_yaml }}"
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Ensure backend service"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition: "{{ lookup('template', addon_dir + 'templates/digital_energy_twin_backend_svc.yaml.j2') | from_yaml }}"
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Ensure ingress for admin direct host"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition:
+      apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      metadata:
+        name: digital-energy-twin-admin-host
+        annotations:
+          cert-manager.io/cluster-issuer: "{{ inv_k8s.cert_manager.issuer_name }}"
+          kubernetes.io/tls-acme: "true"
+          nginx.ingress.kubernetes.io/ssl-redirect: "{{ open_http_port|default('true')|lower }}"
+      spec:
+        ingressClassName: "{{ inv_k8s.ingress_class }}"
+        tls:
+          - hosts:
+              - "{{ digital_energy_twin_admin_direct_host }}"
+            secretName: "{{ digital_energy_twin_admin_direct_host }}-tls"
+        rules:
+          - host: "{{ digital_energy_twin_admin_direct_host }}"
+            http:
+              paths:
+                - path: /
+                  pathType: Prefix
+                  backend:
+                    service:
+                      name: apisix-data-plane
+                      port:
+                        name: http
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Ensure ingress for public direct host"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition:
+      apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      metadata:
+        name: digital-energy-twin-public-host
+        annotations:
+          cert-manager.io/cluster-issuer: "{{ inv_k8s.cert_manager.issuer_name }}"
+          kubernetes.io/tls-acme: "true"
+          nginx.ingress.kubernetes.io/ssl-redirect: "{{ open_http_port|default('true')|lower }}"
+      spec:
+        ingressClassName: "{{ inv_k8s.ingress_class }}"
+        tls:
+          - hosts:
+              - "{{ digital_energy_twin_public_direct_host }}"
+            secretName: "{{ digital_energy_twin_public_direct_host }}-tls"
+        rules:
+          - host: "{{ digital_energy_twin_public_direct_host }}"
+            http:
+              paths:
+                - path: /
+                  pathType: Prefix
+                  backend:
+                    service:
+                      name: apisix-data-plane
+                      port:
+                        name: http
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Ensure ingress for backend direct host"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition:
+      apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      metadata:
+        name: digital-energy-twin-backend-host
+        annotations:
+          cert-manager.io/cluster-issuer: "{{ inv_k8s.cert_manager.issuer_name }}"
+          kubernetes.io/tls-acme: "true"
+          nginx.ingress.kubernetes.io/ssl-redirect: "{{ open_http_port|default('true')|lower }}"
+      spec:
+        ingressClassName: "{{ inv_k8s.ingress_class }}"
+        tls:
+          - hosts:
+              - "{{ digital_energy_twin_backend_direct_host }}"
+            secretName: "{{ digital_energy_twin_backend_direct_host }}-tls"
+        rules:
+          - host: "{{ digital_energy_twin_backend_direct_host }}"
+            http:
+              paths:
+                - path: /
+                  pathType: Prefix
+                  backend:
+                    service:
+                      name: apisix-data-plane
+                      port:
+                        name: http
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Get IDM settings and api-access secret"
+  include_tasks:
+    file: "../../../tasks/access/apis/idm_settings_for_apis.yaml"
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Check if OIDC client exists"
+  set_fact:
+    digital_energy_twin_client_exists: "{{ (clients.json | json_query(query) | length) > 0 }}"
+  vars:
+    query: "[?clientId== '{{ digital_energy_twin_oidc_client_id }}']"
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Create OIDC client"
+  uri:
+    method: POST
+    url: "{{ inv_access.platform.hostname }}/auth/admin/realms/{{ inv_access.tenant.realm_name }}/clients"
+    return_content: yes
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    body_format: json
+    body:
+      clientId: "{{ digital_energy_twin_oidc_client_id }}"
+      enabled: true
+      clientAuthenticatorType: "client-secret"
+      protocol: "openid-connect"
+      publicClient: false
+      standardFlowEnabled: true
+      directAccessGrantsEnabled: true
+      redirectUris:
+        - "https://{{ digital_energy_twin_admin_direct_host }}/*"
+        - "https://{{ digital_energy_twin_public_direct_host }}/*"
+        - "https://{{ digital_energy_twin_admin_direct_host }}{{ digital_energy_twin_oidc_callback_path }}"
+        - "https://{{ digital_energy_twin_public_direct_host }}{{ digital_energy_twin_oidc_callback_path }}"
+      webOrigins:
+        - "https://{{ digital_energy_twin_admin_direct_host }}"
+        - "https://{{ digital_energy_twin_public_direct_host }}"
+        - "https://{{ digital_energy_twin_backend_direct_host }}"
+    headers:
+      Accept: application/json
+      Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+    status_code:
+      - 201
+      - 409
+  when: digital_energy_twin_enabled and not digital_energy_twin_client_exists
+
+- name: "Digital Energy Twin: Refresh client list"
+  uri:
+    method: GET
+    url: "{{ inv_access.platform.hostname }}/auth/admin/realms/{{ inv_access.tenant.realm_name }}/clients"
+    return_content: yes
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    headers:
+      Accept: application/json
+      Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+    status_code: 200
+  register: digital_energy_twin_clients
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Resolve OIDC client internal id"
+  set_fact:
+    digital_energy_twin_client_internal_id: "{{ digital_energy_twin_clients.json | json_query(query) }}"
+  vars:
+    query: "[?clientId== '{{ digital_energy_twin_oidc_client_id }}'].id | [0]"
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Get existing OIDC client details"
+  uri:
+    method: GET
+    url: "{{ inv_access.platform.hostname }}/auth/admin/realms/{{ inv_access.tenant.realm_name }}/clients/{{ digital_energy_twin_client_internal_id }}"
+    return_content: yes
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    headers:
+      Accept: application/json
+      Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+    status_code: 200
+  register: digital_energy_twin_client_details
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Update OIDC client redirect/web origins"
+  uri:
+    method: PUT
+    url: "{{ inv_access.platform.hostname }}/auth/admin/realms/{{ inv_access.tenant.realm_name }}/clients/{{ digital_energy_twin_client_internal_id }}"
+    return_content: yes
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    body_format: json
+    body: "{{ digital_energy_twin_client_details.json | combine(client_updates, recursive=True) }}"
+    headers:
+      Accept: application/json
+      Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+    status_code: 204
+  vars:
+    client_updates:
+      redirectUris:
+        - "https://{{ digital_energy_twin_admin_direct_host }}/*"
+        - "https://{{ digital_energy_twin_public_direct_host }}/*"
+        - "https://{{ digital_energy_twin_admin_direct_host }}{{ digital_energy_twin_oidc_callback_path }}"
+        - "https://{{ digital_energy_twin_public_direct_host }}{{ digital_energy_twin_oidc_callback_path }}"
+      webOrigins:
+        - "https://{{ digital_energy_twin_admin_direct_host }}"
+        - "https://{{ digital_energy_twin_public_direct_host }}"
+        - "https://{{ digital_energy_twin_backend_direct_host }}"
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Get OIDC client secret"
+  uri:
+    method: GET
+    url: "{{ inv_access.platform.hostname }}/auth/admin/realms/{{ inv_access.tenant.realm_name }}/clients/{{ digital_energy_twin_client_internal_id }}/client-secret"
+    return_content: yes
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    headers:
+      Accept: application/json
+      Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+    status_code: 200
+  register: digital_energy_twin_client_secret_response
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Upsert APISIX upstream (admin)"
+  uri:
+    method: PUT
+    url: "https://api-admin.{{ DOMAIN }}/apisix/admin/upstreams/digital-energy-twin-admin-upstream"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    body_format: json
+    body:
+      name: "digital-energy-twin-admin-upstream"
+      desc: "Admin upstream for static panel"
+      type: "roundrobin"
+      scheme: "http"
+      nodes: "{{ { (digital_energy_twin_admin_service_name ~ ':' ~ digital_energy_twin_admin_port) : 1 } }}"
+    headers:
+      Accept: application/json
+      X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
+    status_code:
+      - 200
+      - 201
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Upsert APISIX upstream (public)"
+  uri:
+    method: PUT
+    url: "https://api-admin.{{ DOMAIN }}/apisix/admin/upstreams/digital-energy-twin-public-upstream"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    body_format: json
+    body:
+      name: "digital-energy-twin-public-upstream"
+      desc: "Public upstream for static panel"
+      type: "roundrobin"
+      scheme: "http"
+      nodes: "{{ { (digital_energy_twin_public_service_name ~ ':' ~ digital_energy_twin_public_port) : 1 } }}"
+    headers:
+      Accept: application/json
+      X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
+    status_code:
+      - 200
+      - 201
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Upsert APISIX upstream (backend)"
+  uri:
+    method: PUT
+    url: "https://api-admin.{{ DOMAIN }}/apisix/admin/upstreams/digital-energy-twin-backend-upstream"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    body_format: json
+    body:
+      name: "digital-energy-twin-backend-upstream"
+      desc: "Backend upstream for API"
+      type: "roundrobin"
+      scheme: "http"
+      nodes: "{{ { (digital_energy_twin_backend_service_name ~ ':' ~ digital_energy_twin_backend_port) : 1 } }}"
+    headers:
+      Accept: application/json
+      X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
+    status_code:
+      - 200
+      - 201
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Upsert protected admin direct-host route"
+  uri:
+    method: PUT
+    url: "https://api-admin.{{ DOMAIN }}/apisix/admin/routes/digital-energy-twin-admin-direct"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    body_format: json
+    body:
+      name: "digital-energy-twin-admin-direct"
+      desc: "Protected admin direct-host route"
+      hosts:
+        - "{{ digital_energy_twin_admin_direct_host }}"
+      uri: "/*"
+      upstream_id: "digital-energy-twin-admin-upstream"
+      status: 1
+      plugins:
+        openid-connect:
+          bearer_only: false
+          client_id: "{{ digital_energy_twin_oidc_client_id }}"
+          client_secret: "{{ digital_energy_twin_client_secret_response.json.value }}"
+          redirect_uri: "https://{{ digital_energy_twin_admin_direct_host }}{{ digital_energy_twin_oidc_callback_path }}"
+          discovery: "{{ inv_access.platform.hostname }}/realms/{{ inv_access.tenant.realm_name }}/.well-known/openid-configuration"
+          introspection_endpoint: "{{ inv_access.platform.hostname }}/realms/{{ inv_access.tenant.realm_name }}/protocol/openid-connect/token/introspect"
+          introspection_endpoint_auth_method: post
+          realm: "{{ inv_access.tenant.realm_name }}"
+          set_userinfo_header: true
+    headers:
+      Accept: application/json
+      X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
+    status_code:
+      - 200
+      - 201
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Upsert public direct-host route (protected)"
+  uri:
+    method: PUT
+    url: "https://api-admin.{{ DOMAIN }}/apisix/admin/routes/digital-energy-twin-public-direct"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    body_format: json
+    body:
+      name: "digital-energy-twin-public-direct"
+      desc: "Public direct-host route (protected)"
+      hosts:
+        - "{{ digital_energy_twin_public_direct_host }}"
+      uri: "/*"
+      upstream_id: "digital-energy-twin-public-upstream"
+      status: 1
+      plugins:
+        openid-connect:
+          bearer_only: false
+          client_id: "{{ digital_energy_twin_oidc_client_id }}"
+          client_secret: "{{ digital_energy_twin_client_secret_response.json.value }}"
+          redirect_uri: "https://{{ digital_energy_twin_public_direct_host }}{{ digital_energy_twin_oidc_callback_path }}"
+          discovery: "{{ inv_access.platform.hostname }}/realms/{{ inv_access.tenant.realm_name }}/.well-known/openid-configuration"
+          introspection_endpoint: "{{ inv_access.platform.hostname }}/realms/{{ inv_access.tenant.realm_name }}/protocol/openid-connect/token/introspect"
+          introspection_endpoint_auth_method: post
+          realm: "{{ inv_access.tenant.realm_name }}"
+          set_userinfo_header: true
+    headers:
+      Accept: application/json
+      X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
+    status_code:
+      - 200
+      - 201
+  when: digital_energy_twin_enabled and digital_energy_twin_public_requires_login
+
+- name: "Digital Energy Twin: Upsert public direct-host route (open)"
+  uri:
+    method: PUT
+    url: "https://api-admin.{{ DOMAIN }}/apisix/admin/routes/digital-energy-twin-public-direct"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    body_format: json
+    body:
+      name: "digital-energy-twin-public-direct"
+      desc: "Public direct-host route (open)"
+      hosts:
+        - "{{ digital_energy_twin_public_direct_host }}"
+      uri: "/*"
+      upstream_id: "digital-energy-twin-public-upstream"
+      status: 1
+      plugins: {}
+    headers:
+      Accept: application/json
+      X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
+    status_code:
+      - 200
+      - 201
+  when: digital_energy_twin_enabled and not digital_energy_twin_public_requires_login
+
+- name: "Digital Energy Twin: Upsert backend direct-host route"
+  uri:
+    method: PUT
+    url: "https://api-admin.{{ DOMAIN }}/apisix/admin/routes/digital-energy-twin-backend-direct"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    body_format: json
+    body:
+      name: "digital-energy-twin-backend-direct"
+      desc: "Backend direct-host route"
+      hosts:
+        - "{{ digital_energy_twin_backend_direct_host }}"
+      uri: "/*"
+      upstream_id: "digital-energy-twin-backend-upstream"
+      status: 1
+      plugins: {}
+    headers:
+      Accept: application/json
+      X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
+    status_code:
+      - 200
+      - 201
+  when: digital_energy_twin_enabled
