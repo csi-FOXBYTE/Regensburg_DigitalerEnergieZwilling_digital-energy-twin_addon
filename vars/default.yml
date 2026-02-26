@@ -1,0 +1,5 @@
+---
+addon_dir: "addons/digital-energy-twin_addon/"
+
+# Default Keycloak client ID for 
+IDM_CLIENT_DIGITAL-ENERGY-TWIN: "digital-energy-twin"

@@ -1,0 +1,16 @@
+# ---------------------------------------------------------
+# Default inventory for CIVITAS/CORE Addon 
+# ---------------------------------------------------------
+
+---
+all:
+  children:
+    controller:
+      vars:
+        inv_addons:
+          digital-energy-twin:
+            enable: true
+            enable_ingress: true
+            ns_create: true
+            ns_name: "{{ ENVIRONMENT }}--stack"
+            ns_kubeconfig: "{{ kubeconfig_file }}"

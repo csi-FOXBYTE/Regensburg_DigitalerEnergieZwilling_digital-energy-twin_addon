@@ -1,0 +1,10 @@
+---
+- name: Include  vars
+  include_vars:
+    dir: vars
+  tags: ["addons"]
+
+- name: Setup 
+  import_tasks: tasks/digital-energy-twin.yml
+  when: inv_addons.digital-energy-twin.enable
+  tags: ["addons", "addon_digital-energy-twin"]
