@@ -18,5 +18,10 @@ spec:
         - name: backend
           image: "{{ digital_energy_twin_backend_image }}"
           imagePullPolicy: Always
+          env:
+            - name: DATABASE_URL
+              value: "{{ digital_energy_twin_database_url }}"
+            - name: PORT
+              value: "80"
           ports:
             - containerPort: {{ digital_energy_twin_backend_port | int }}

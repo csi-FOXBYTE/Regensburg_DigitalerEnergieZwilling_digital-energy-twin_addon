@@ -20,4 +20,5 @@ all:
             backend_host: "api.det.{{ DOMAIN }}"
             admin_image: "nginx:alpine"
             public_image: "ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_frontend:dev"
-            backend_image: "nginx:alpine"
+            backend_image: "ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_backend:dev"
+            backend_cors_additional_origins: []

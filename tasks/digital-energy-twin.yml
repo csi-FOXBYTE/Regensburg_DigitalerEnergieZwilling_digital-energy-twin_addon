@@ -17,10 +17,12 @@
       - digital_energy_twin.admin_image is defined
       - digital_energy_twin.public_image is defined
       - digital_energy_twin.backend_image is defined
+      - digital_energy_twin.backend_cors_additional_origins is defined
     fail_msg: >-
       Missing required keys in inv_cust['digital-energy-twin'].
       Expected: enable, ns_name, ns_kubeconfig, public_requires_login, oidc_client_id,
-      admin_host, public_host, backend_host, admin_image, public_image, backend_image.
+      admin_host, public_host, backend_host, admin_image, public_image, backend_image,
+      backend_cors_additional_origins.
 
 - name: "Digital Energy Twin: Set defaults"
   set_fact:
@@ -35,9 +37,37 @@
     digital_energy_twin_backend_image: "{{ digital_energy_twin.backend_image }}"
     digital_energy_twin_admin_image: "{{ digital_energy_twin.admin_image }}"
     digital_energy_twin_public_image: "{{ digital_energy_twin.public_image }}"
+    digital_energy_twin_db_host: "central-db.{{ inv_central_db.ns_name }}.svc.cluster.local"
+    digital_energy_twin_db_port: "{{ inv_central_db.port }}"
+    digital_energy_twin_db_name: "postgres"
     digital_energy_twin_backend_port: 80
     digital_energy_twin_admin_port: 80
     digital_energy_twin_public_port: 80
+    digital_energy_twin_backend_common_plugins:
+      cors:
+        allow_origins: "{{ ((['https://' ~ digital_energy_twin.public_host, 'https://' ~ digital_energy_twin.admin_host] + digital_energy_twin.backend_cors_additional_origins) | unique) | join(',') }}"
+        allow_methods: "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+        allow_headers: "Accept,Authorization,Content-Type,Origin,Referer,User-Agent,X-Access-Token,X-Requested-With"
+        expose_headers: "Content-Length,Content-Type,Date,Server"
+        max_age: 3600
+        allow_credential: true
+      limit-count:
+        count: 200
+        time_window: 60
+        rejected_code: 429
+        key_type: var
+        key: remote_addr
+        policy: local
+      response-rewrite:
+        headers:
+          set:
+            X-Content-Type-Options: "nosniff"
+            X-Frame-Options: "DENY"
+            Referrer-Policy: "strict-origin-when-cross-origin"
+            Permissions-Policy: "geolocation=(), microphone=(), camera=()"
+            X-XSS-Protection: "1; mode=block"
+            Strict-Transport-Security: "max-age=31536000; includeSubDomains"
+            Content-Security-Policy: "default-src 'self'; frame-ancestors 'none'; base-uri 'self'"
 
 - name: "Digital Energy Twin: Set service names"
   set_fact:
@@ -52,7 +82,6 @@
     digital_energy_twin_public_upstream_host: "{{ digital_energy_twin_public_service_name }}"
     digital_energy_twin_public_upstream_port: "{{ digital_energy_twin_public_port }}"
     digital_energy_twin_backend_upstream_host: "{{ digital_energy_twin_backend_service_name }}"
-    digital_energy_twin_backend_upstream_port: "{{ digital_energy_twin_backend_port }}"
   when: digital_energy_twin_enabled
 
 - name: "Digital Energy Twin: Set default facts for K8S"
@@ -60,6 +89,28 @@
     k8s_config: "{{ K8S_KUBECONFIG_PATH }}/{{ digital_energy_twin.ns_kubeconfig }}"
     k8s_context: "{{ inv_k8s.config.context }}"
     k8s_namespace: "{{ digital_energy_twin_namespace }}"
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Get central DB credentials secret"
+  kubernetes.core.k8s_info:
+    kind: Secret
+    namespace: "{{ inv_central_db.ns_name }}"
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    name: postgres.central-db.credentials.postgresql.acid.zalan.do
+  register: digital_energy_twin_db_secret
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Set DB credentials from internal DB"
+  set_fact:
+    digital_energy_twin_db_user: "{{ digital_energy_twin_db_secret.resources[0].data.username | b64decode }}"
+    digital_energy_twin_db_password: "{{ digital_energy_twin_db_secret.resources[0].data.password | b64decode }}"
+  when: digital_energy_twin_enabled
+  failed_when: digital_energy_twin_db_secret.resources | length == 0
+
+- name: "Digital Energy Twin: Build backend database URL"
+  set_fact:
+    digital_energy_twin_database_url: "postgresql://{{ digital_energy_twin_db_user }}:{{ digital_energy_twin_db_password }}@{{ digital_energy_twin_db_host }}:{{ digital_energy_twin_db_port }}/{{ digital_energy_twin_db_name }}"
   when: digital_energy_twin_enabled
 
 - name: "Digital Energy Twin: Ensure placeholder content configmap"
@@ -444,6 +495,15 @@
           introspection_endpoint_auth_method: post
           realm: "{{ inv_access.tenant.realm_name }}"
           set_userinfo_header: true
+          session:
+            secret: "{{ digital_energy_twin_oidc_session_secret | default(inv_access.apisix.api_credentials.admin_role) }}"
+            cookie:
+              name: "det_admin_session"
+              domain: ".{{ DOMAIN }}"
+              path: "/"
+              secure: true
+              http_only: true
+              samesite: "None"
     headers:
       Accept: application/json
       X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
@@ -477,6 +537,15 @@
           introspection_endpoint_auth_method: post
           realm: "{{ inv_access.tenant.realm_name }}"
           set_userinfo_header: true
+          session:
+            secret: "{{ digital_energy_twin_oidc_session_secret | default(inv_access.apisix.api_credentials.admin_role) }}"
+            cookie:
+              name: "det_public_session"
+              domain: ".{{ DOMAIN }}"
+              path: "/"
+              secure: true
+              http_only: true
+              samesite: "None"
     headers:
       Accept: application/json
       X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
@@ -508,21 +577,103 @@
       - 201
   when: digital_energy_twin_enabled and not digital_energy_twin_public_requires_login
 
-- name: "Digital Energy Twin: Upsert backend direct-host route"
+- name: "Digital Energy Twin: Delete legacy backend catch-all route"
+  uri:
+    method: DELETE
+    url: "https://api-admin.{{ DOMAIN }}/apisix/admin/routes/digital-energy-twin-backend-direct"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    headers:
+      Accept: application/json
+      X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
+    status_code:
+      - 200
+      - 404
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Upsert backend public-api route (open)"
   uri:
     method: PUT
-    url: "https://api-admin.{{ DOMAIN }}/apisix/admin/routes/digital-energy-twin-backend-direct"
+    url: "https://api-admin.{{ DOMAIN }}/apisix/admin/routes/digital-energy-twin-backend-public-api"
     ca_path: "{{ inv_k8s.ingress.ca_path }}"
     body_format: json
     body:
-      name: "digital-energy-twin-backend-direct"
-      desc: "Backend direct-host route"
+      name: "digital-energy-twin-backend-public-api"
+      desc: "Backend public API route"
       hosts:
         - "{{ digital_energy_twin_backend_direct_host }}"
-      uri: "/*"
+      uri: "/api/public/*"
       upstream_id: "digital-energy-twin-backend-upstream"
       status: 1
-      plugins: {}
+      plugins: "{{ digital_energy_twin_backend_common_plugins }}"
+    headers:
+      Accept: application/json
+      X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
+    status_code:
+      - 200
+      - 201
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Upsert backend docs root route (open)"
+  uri:
+    method: PUT
+    url: "https://api-admin.{{ DOMAIN }}/apisix/admin/routes/digital-energy-twin-backend-docs-root"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    body_format: json
+    body:
+      name: "digital-energy-twin-backend-docs-root"
+      desc: "Backend docs root route"
+      hosts:
+        - "{{ digital_energy_twin_backend_direct_host }}"
+      uri: "/docs"
+      upstream_id: "digital-energy-twin-backend-upstream"
+      status: 1
+      plugins: "{{ digital_energy_twin_backend_common_plugins }}"
+    headers:
+      Accept: application/json
+      X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
+    status_code:
+      - 200
+      - 201
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Upsert backend docs route (open)"
+  uri:
+    method: PUT
+    url: "https://api-admin.{{ DOMAIN }}/apisix/admin/routes/digital-energy-twin-backend-docs"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    body_format: json
+    body:
+      name: "digital-energy-twin-backend-docs"
+      desc: "Backend docs wildcard route"
+      hosts:
+        - "{{ digital_energy_twin_backend_direct_host }}"
+      uri: "/docs/*"
+      upstream_id: "digital-energy-twin-backend-upstream"
+      status: 1
+      plugins: "{{ digital_energy_twin_backend_common_plugins }}"
+    headers:
+      Accept: application/json
+      X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
+    status_code:
+      - 200
+      - 201
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Upsert backend admin-api route (OIDC protected)"
+  uri:
+    method: PUT
+    url: "https://api-admin.{{ DOMAIN }}/apisix/admin/routes/digital-energy-twin-backend-admin-api"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    body_format: json
+    body:
+      name: "digital-energy-twin-backend-admin-api"
+      desc: "Backend admin API route (protected)"
+      hosts:
+        - "{{ digital_energy_twin_backend_direct_host }}"
+      uri: "/api/admin/*"
+      upstream_id: "digital-energy-twin-backend-upstream"
+      status: 1
+      plugins: "{{ digital_energy_twin_backend_common_plugins | combine({'openid-connect': {'bearer_only': false, 'client_id': digital_energy_twin_oidc_client_id, 'client_secret': digital_energy_twin_client_secret_response.json.value, 'redirect_uri': ('https://' ~ digital_energy_twin_backend_direct_host ~ digital_energy_twin_oidc_callback_path), 'discovery': (inv_access.platform.hostname ~ '/realms/' ~ inv_access.tenant.realm_name ~ '/.well-known/openid-configuration'), 'introspection_endpoint': (inv_access.platform.hostname ~ '/realms/' ~ inv_access.tenant.realm_name ~ '/protocol/openid-connect/token/introspect'), 'introspection_endpoint_auth_method': 'post', 'realm': inv_access.tenant.realm_name, 'set_access_token_header': true, 'set_userinfo_header': true, 'session': {'secret': (digital_energy_twin_oidc_session_secret | default(inv_access.apisix.api_credentials.admin_role)), 'cookie': {'name': 'det_api_session', 'domain': ('.' ~ DOMAIN), 'path': '/', 'secure': true, 'http_only': true, 'samesite': 'None'}}}}, recursive=True) }}"
     headers:
       Accept: application/json
       X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
