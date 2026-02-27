@@ -44,12 +44,39 @@ inv_cust:
 - `public_host` -> public frontend
 - `backend_host` -> backend API
 
-### Backend APISIX routes
+### APISIX route matrix
+
+`admin_host`:
+
+- `/*` -> admin frontend
+- `/api/*` -> backend (OIDC required + role `admin`)
+
+`public_host`:
+
+- `/*` -> public frontend
+- `/api/*` -> backend (OIDC required + role `viewer`) when `public_requires_login: true`
+- `/api/*` -> backend (open, no OIDC) when `public_requires_login: false`
+
+`backend_host`:
 
 - `/api/public/*` -> open
 - `/docs` -> open
 - `/docs/*` -> open
-- `/api/admin/*` -> protected with APISIX `openid-connect`
+- `/api/admin/*` -> protected with APISIX `openid-connect` (auth at gateway, no explicit role check in APISIX)
+
+### Frontend role checks
+
+The addon ensures client roles exist in Keycloak for the OIDC client:
+
+- `admin`
+- `viewer`
+
+Role checks on frontend routes in APISIX:
+
+- `admin_host /api/*` requires role `admin`
+- `public_host /api/*` requires role `viewer` when `public_requires_login: true`
+
+Note: roles are created automatically, but user/group role assignments are not managed by this addon.
 
 ### Backend APISIX plugins
 
