@@ -487,6 +487,9 @@
       plugins:
         openid-connect:
           bearer_only: false
+          unauth_action: auth
+          timeout: 2
+          introspection_interval: 300
           client_id: "{{ digital_energy_twin_oidc_client_id }}"
           client_secret: "{{ digital_energy_twin_client_secret_response.json.value }}"
           redirect_uri: "https://{{ digital_energy_twin_admin_direct_host }}{{ digital_energy_twin_oidc_callback_path }}"
@@ -494,7 +497,7 @@
           introspection_endpoint: "{{ inv_access.platform.hostname }}/realms/{{ inv_access.tenant.realm_name }}/protocol/openid-connect/token/introspect"
           introspection_endpoint_auth_method: post
           realm: "{{ inv_access.tenant.realm_name }}"
-          set_userinfo_header: true
+          set_userinfo_header: false
           session:
             secret: "{{ digital_energy_twin_oidc_session_secret | default(inv_access.apisix.api_credentials.admin_role) }}"
             cookie:
@@ -529,6 +532,9 @@
       plugins:
         openid-connect:
           bearer_only: false
+          unauth_action: auth
+          timeout: 2
+          introspection_interval: 300
           client_id: "{{ digital_energy_twin_oidc_client_id }}"
           client_secret: "{{ digital_energy_twin_client_secret_response.json.value }}"
           redirect_uri: "https://{{ digital_energy_twin_public_direct_host }}{{ digital_energy_twin_oidc_callback_path }}"
@@ -536,7 +542,7 @@
           introspection_endpoint: "{{ inv_access.platform.hostname }}/realms/{{ inv_access.tenant.realm_name }}/protocol/openid-connect/token/introspect"
           introspection_endpoint_auth_method: post
           realm: "{{ inv_access.tenant.realm_name }}"
-          set_userinfo_header: true
+          set_userinfo_header: false
           session:
             secret: "{{ digital_energy_twin_oidc_session_secret | default(inv_access.apisix.api_credentials.admin_role) }}"
             cookie:
@@ -673,7 +679,7 @@
       uri: "/api/admin/*"
       upstream_id: "digital-energy-twin-backend-upstream"
       status: 1
-      plugins: "{{ digital_energy_twin_backend_common_plugins | combine({'openid-connect': {'bearer_only': false, 'client_id': digital_energy_twin_oidc_client_id, 'client_secret': digital_energy_twin_client_secret_response.json.value, 'redirect_uri': ('https://' ~ digital_energy_twin_backend_direct_host ~ digital_energy_twin_oidc_callback_path), 'discovery': (inv_access.platform.hostname ~ '/realms/' ~ inv_access.tenant.realm_name ~ '/.well-known/openid-configuration'), 'introspection_endpoint': (inv_access.platform.hostname ~ '/realms/' ~ inv_access.tenant.realm_name ~ '/protocol/openid-connect/token/introspect'), 'introspection_endpoint_auth_method': 'post', 'realm': inv_access.tenant.realm_name, 'set_access_token_header': true, 'set_userinfo_header': true, 'session': {'secret': (digital_energy_twin_oidc_session_secret | default(inv_access.apisix.api_credentials.admin_role)), 'cookie': {'name': 'det_api_session', 'domain': ('.' ~ DOMAIN), 'path': '/', 'secure': true, 'http_only': true, 'samesite': 'None'}}}}, recursive=True) }}"
+      plugins: "{{ digital_energy_twin_backend_common_plugins | combine({'openid-connect': {'bearer_only': false, 'unauth_action': 'deny', 'timeout': 2, 'introspection_interval': 300, 'client_id': digital_energy_twin_oidc_client_id, 'client_secret': digital_energy_twin_client_secret_response.json.value, 'redirect_uri': ('https://' ~ digital_energy_twin_backend_direct_host ~ digital_energy_twin_oidc_callback_path), 'discovery': (inv_access.platform.hostname ~ '/realms/' ~ inv_access.tenant.realm_name ~ '/.well-known/openid-configuration'), 'introspection_endpoint': (inv_access.platform.hostname ~ '/realms/' ~ inv_access.tenant.realm_name ~ '/protocol/openid-connect/token/introspect'), 'introspection_endpoint_auth_method': 'post', 'realm': inv_access.tenant.realm_name, 'set_access_token_header': true, 'set_userinfo_header': false, 'session': {'secret': (digital_energy_twin_oidc_session_secret | default(inv_access.apisix.api_credentials.admin_role)), 'cookie': {'name': 'det_api_session', 'domain': ('.' ~ DOMAIN), 'path': '/', 'secure': true, 'http_only': true, 'samesite': 'None'}}}}, recursive=True) }}"
     headers:
       Accept: application/json
       X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
