@@ -14,9 +14,21 @@ spec:
       labels:
         app: digital-energy-twin-public
     spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: public
           image: "{{ digital_energy_twin_public_image }}"
           imagePullPolicy: Always
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - NET_BIND_SERVICE
           ports:
             - containerPort: {{ digital_energy_twin_public_port | int }}

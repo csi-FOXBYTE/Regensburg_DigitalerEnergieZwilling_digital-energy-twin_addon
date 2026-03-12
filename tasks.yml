@@ -6,5 +6,5 @@
 
 - name: Setup Digital Energy Twin
   import_tasks: tasks/digital-energy-twin.yml
-  when: inv_cust['digital-energy-twin'].enable | bool
+  when: inv_addons['digital-energy-twin'].enable | bool
   tags: ["addons", "addon_digital-energy-twin"]

@@ -14,10 +14,22 @@ spec:
       labels:
         app: digital-energy-twin-admin
     spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: admin
           image: "{{ digital_energy_twin_admin_image }}"
           imagePullPolicy: Always
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - NET_BIND_SERVICE
           ports:
             - containerPort: {{ digital_energy_twin_admin_port | int }}
           volumeMounts:

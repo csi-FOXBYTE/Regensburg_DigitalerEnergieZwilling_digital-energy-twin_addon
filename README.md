@@ -14,27 +14,39 @@ Place this addon in the Civitas Core addons folder and import it via `inv_addons
 
 ## Configuration
 
-Main config lives under `inv_cust.digital-energy-twin`.
+Main config lives under `inv_addons.digital-energy-twin`.
 Defaults are defined in [default_inventory.yml](default_inventory.yml).
 
 Minimal example:
 
 ```yaml
-inv_cust:
+inv_addons:
+  import: true
+  addons:
+    - "addons/digital-energy-twin_addon/tasks.yml"
   digital-energy-twin:
     enable: true
-    ns_name: "{{ inv_access.apisix.ns_name }}"
+    ns_create: true
+    ns_name: "{{ ENVIRONMENT }}-digitalenergytwin"
     ns_kubeconfig: "{{ kubeconfig_file }}"
     public_requires_login: true
     oidc_client_id: "digital-energy-twin"
     admin_host: "admin.det.{{ DOMAIN }}"
     public_host: "det.{{ DOMAIN }}"
     backend_host: "api.det.{{ DOMAIN }}"
-    admin_image: "nginx:alpine"
-    public_image: "ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_frontend:dev"
-    backend_image: "ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_backend:dev"
     backend_cors_additional_origins: []
 ```
+
+By default, the addon works without any `software` section in your deployment inventory.
+Container images are resolved from [vars/software_references.yml](vars/software_references.yml)
+as single source of truth.
+Optional per-environment overrides are still possible by setting
+`admin_image`, `public_image`, or `backend_image` in `inv_addons.digital-energy-twin`.
+
+Namespace behavior:
+
+- `ns_create: true` -> addon creates the namespace if missing
+- `ns_create: false` -> addon expects the namespace to exist and fails otherwise
 
 ## Routing and Security
 
@@ -92,6 +104,11 @@ CORS defaults to:
 - `https://{{ admin_host }}`
 
 You can extend allowed origins with `backend_cors_additional_origins`.
+
+## Security Requirements
+
+- Non-root container runtime is enforced via pod/container `securityContext` in all deployment templates.
+- Images must support non-root execution.
 
 ## Execute
 

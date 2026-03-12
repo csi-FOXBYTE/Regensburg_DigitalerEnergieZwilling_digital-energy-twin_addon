@@ -1,12 +1,13 @@
 ---
 - name: "Digital Energy Twin: Load config"
   set_fact:
-    digital_energy_twin: "{{ inv_cust['digital-energy-twin'] }}"
+    digital_energy_twin: "{{ inv_addons['digital-energy-twin'] }}"
 
 - name: "Digital Energy Twin: Validate required config"
   ansible.builtin.assert:
     that:
       - digital_energy_twin.enable is defined
+      - digital_energy_twin.ns_create is defined
       - digital_energy_twin.ns_name is defined
       - digital_energy_twin.ns_kubeconfig is defined
       - digital_energy_twin.public_requires_login is defined
@@ -14,19 +15,16 @@
       - digital_energy_twin.admin_host is defined
       - digital_energy_twin.public_host is defined
       - digital_energy_twin.backend_host is defined
-      - digital_energy_twin.admin_image is defined
-      - digital_energy_twin.public_image is defined
-      - digital_energy_twin.backend_image is defined
       - digital_energy_twin.backend_cors_additional_origins is defined
     fail_msg: >-
-      Missing required keys in inv_cust['digital-energy-twin'].
-      Expected: enable, ns_name, ns_kubeconfig, public_requires_login, oidc_client_id,
-      admin_host, public_host, backend_host, admin_image, public_image, backend_image,
-      backend_cors_additional_origins.
+      Missing required keys in inv_addons['digital-energy-twin'].
+      Expected: enable, ns_create, ns_name, ns_kubeconfig, public_requires_login, oidc_client_id,
+      admin_host, public_host, backend_host, backend_cors_additional_origins.
 
 - name: "Digital Energy Twin: Set defaults"
   set_fact:
     digital_energy_twin_enabled: "{{ digital_energy_twin.enable | bool }}"
+    digital_energy_twin_ns_create: "{{ digital_energy_twin.ns_create | bool }}"
     digital_energy_twin_namespace: "{{ digital_energy_twin.ns_name }}"
     digital_energy_twin_oidc_callback_path: "/oidc/callback"
     digital_energy_twin_public_requires_login: "{{ digital_energy_twin.public_requires_login | bool }}"
@@ -34,9 +32,9 @@
     digital_energy_twin_admin_direct_host: "{{ digital_energy_twin.admin_host }}"
     digital_energy_twin_public_direct_host: "{{ digital_energy_twin.public_host }}"
     digital_energy_twin_backend_direct_host: "{{ digital_energy_twin.backend_host }}"
-    digital_energy_twin_backend_image: "{{ digital_energy_twin.backend_image }}"
-    digital_energy_twin_admin_image: "{{ digital_energy_twin.admin_image }}"
-    digital_energy_twin_public_image: "{{ digital_energy_twin.public_image }}"
+    digital_energy_twin_admin_image: "{{ digital_energy_twin.admin_image | default(software.digital_energy_twin_addon.admin.registry ~ '/' ~ software.digital_energy_twin_addon.admin.repository ~ ':' ~ software.digital_energy_twin_addon.admin.tag) }}"
+    digital_energy_twin_public_image: "{{ digital_energy_twin.public_image | default(software.digital_energy_twin_addon.public.registry ~ '/' ~ software.digital_energy_twin_addon.public.repository ~ ':' ~ software.digital_energy_twin_addon.public.tag) }}"
+    digital_energy_twin_backend_image: "{{ digital_energy_twin.backend_image | default(software.digital_energy_twin_addon.backend.registry ~ '/' ~ software.digital_energy_twin_addon.backend.repository ~ ':' ~ software.digital_energy_twin_addon.backend.tag) }}"
     digital_energy_twin_db_host: "central-db.{{ inv_central_db.ns_name }}.svc.cluster.local"
     digital_energy_twin_db_port: "{{ inv_central_db.port }}"
     digital_energy_twin_db_name: "postgres"
@@ -79,11 +77,11 @@
 
 - name: "Digital Energy Twin: Resolve upstreams"
   set_fact:
-    digital_energy_twin_admin_upstream_host: "{{ digital_energy_twin_admin_service_name }}"
+    digital_energy_twin_admin_upstream_host: "{{ digital_energy_twin_admin_service_name }}.{{ digital_energy_twin_namespace }}.svc.cluster.local"
     digital_energy_twin_admin_upstream_port: "{{ digital_energy_twin_admin_port }}"
-    digital_energy_twin_public_upstream_host: "{{ digital_energy_twin_public_service_name }}"
+    digital_energy_twin_public_upstream_host: "{{ digital_energy_twin_public_service_name }}.{{ digital_energy_twin_namespace }}.svc.cluster.local"
     digital_energy_twin_public_upstream_port: "{{ digital_energy_twin_public_port }}"
-    digital_energy_twin_backend_upstream_host: "{{ digital_energy_twin_backend_service_name }}"
+    digital_energy_twin_backend_upstream_host: "{{ digital_energy_twin_backend_service_name }}.{{ digital_energy_twin_namespace }}.svc.cluster.local"
   when: digital_energy_twin_enabled
 
 - name: "Digital Energy Twin: Set default facts for K8S"
@@ -92,6 +90,36 @@
     k8s_context: "{{ inv_k8s.config.context }}"
     k8s_namespace: "{{ digital_energy_twin_namespace }}"
   when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Ensure namespace exists (if ns_create=true)"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ k8s_namespace }}"
+  when: digital_energy_twin_enabled and digital_energy_twin_ns_create
+
+- name: "Digital Energy Twin: Check namespace exists (if ns_create=false)"
+  kubernetes.core.k8s_info:
+    kind: Namespace
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    name: "{{ k8s_namespace }}"
+  register: digital_energy_twin_namespace_info
+  when: digital_energy_twin_enabled and not digital_energy_twin_ns_create
+
+- name: "Digital Energy Twin: Fail if namespace is missing and ns_create=false"
+  ansible.builtin.assert:
+    that:
+      - digital_energy_twin_namespace_info.resources | length > 0
+    fail_msg: >-
+      Namespace '{{ k8s_namespace }}' does not exist but ns_create is false.
+      Create the namespace manually or set inv_addons['digital-energy-twin'].ns_create to true.
+  when: digital_energy_twin_enabled and not digital_energy_twin_ns_create
 
 - name: "Digital Energy Twin: Get central DB credentials secret"
   kubernetes.core.k8s_info:
@@ -461,7 +489,7 @@
       desc: "Admin upstream for static panel"
       type: "roundrobin"
       scheme: "http"
-      nodes: "{{ { (digital_energy_twin_admin_service_name ~ ':' ~ digital_energy_twin_admin_port) : 1 } }}"
+      nodes: "{{ { (digital_energy_twin_admin_upstream_host ~ ':' ~ digital_energy_twin_admin_upstream_port) : 1 } }}"
     headers:
       Accept: application/json
       X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
@@ -481,7 +509,7 @@
       desc: "Public upstream for static panel"
       type: "roundrobin"
       scheme: "http"
-      nodes: "{{ { (digital_energy_twin_public_service_name ~ ':' ~ digital_energy_twin_public_port) : 1 } }}"
+      nodes: "{{ { (digital_energy_twin_public_upstream_host ~ ':' ~ digital_energy_twin_public_upstream_port) : 1 } }}"
     headers:
       Accept: application/json
       X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
@@ -501,7 +529,7 @@
       desc: "Backend upstream for API"
       type: "roundrobin"
       scheme: "http"
-      nodes: "{{ { (digital_energy_twin_backend_service_name ~ ':' ~ digital_energy_twin_backend_port) : 1 } }}"
+      nodes: "{{ { (digital_energy_twin_backend_upstream_host ~ ':' ~ digital_energy_twin_backend_port) : 1 } }}"
     headers:
       Accept: application/json
       X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
