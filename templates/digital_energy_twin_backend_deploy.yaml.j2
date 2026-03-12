@@ -34,6 +34,6 @@ spec:
             - name: DATABASE_URL
               value: "{{ digital_energy_twin_database_url }}"
             - name: PORT
-              value: "80"
+              value: "{{ digital_energy_twin_backend_port | string }}"
           ports:
             - containerPort: {{ digital_energy_twin_backend_port | int }}

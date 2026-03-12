@@ -38,9 +38,9 @@
     digital_energy_twin_db_host: "central-db.{{ inv_central_db.ns_name }}.svc.cluster.local"
     digital_energy_twin_db_port: "{{ inv_central_db.port }}"
     digital_energy_twin_db_name: "postgres"
-    digital_energy_twin_backend_port: 80
-    digital_energy_twin_admin_port: 80
-    digital_energy_twin_public_port: 80
+    digital_energy_twin_backend_port: "{{ digital_energy_twin.backend_port | default(5000) | int }}"
+    digital_energy_twin_admin_port: "{{ digital_energy_twin.admin_port | default(8080) | int }}"
+    digital_energy_twin_public_port: "{{ digital_energy_twin.public_port | default(8080) | int }}"
     digital_energy_twin_admin_required_role: "admin"
     digital_energy_twin_viewer_required_role: "viewer"
     digital_energy_twin_backend_common_plugins:
