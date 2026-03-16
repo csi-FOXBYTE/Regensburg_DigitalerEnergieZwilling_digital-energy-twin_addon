@@ -252,7 +252,7 @@
                   pathType: Prefix
                   backend:
                     service:
-                      name: apisix-data-plane
+                      name: "{{ digital_energy_twin_admin_service_name }}"
                       port:
                         name: http
   when: digital_energy_twin_enabled
@@ -286,7 +286,7 @@
                   pathType: Prefix
                   backend:
                     service:
-                      name: apisix-data-plane
+                      name: "{{ digital_energy_twin_public_service_name }}"
                       port:
                         name: http
   when: digital_energy_twin_enabled
@@ -320,7 +320,7 @@
                   pathType: Prefix
                   backend:
                     service:
-                      name: apisix-data-plane
+                      name: "{{ digital_energy_twin_backend_service_name }}"
                       port:
                         name: http
   when: digital_energy_twin_enabled
