@@ -43,6 +43,7 @@
     digital_energy_twin_public_port: "{{ digital_energy_twin.public_port | default(8080) | int }}"
     digital_energy_twin_admin_required_role: "admin"
     digital_energy_twin_viewer_required_role: "viewer"
+    digital_energy_twin_apisix_data_plane_host: "{{ digital_energy_twin.apisix_data_plane_host | default('apisix-data-plane.' ~ ENVIRONMENT ~ '-access-stack.svc.cluster.local') }}"
     digital_energy_twin_backend_common_plugins:
       cors:
         allow_origins: "{{ ((['https://' ~ digital_energy_twin.public_host, 'https://' ~ digital_energy_twin.admin_host] + digital_energy_twin.backend_cors_additional_origins) | unique) | join(',') }}"
@@ -223,6 +224,25 @@
     definition: "{{ lookup('template', addon_dir + 'templates/digital_energy_twin_backend_svc.yaml.j2') | from_yaml }}"
   when: digital_energy_twin_enabled
 
+- name: "Digital Energy Twin: Ensure APISIX data-plane service reference"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: apisix-data-plane
+      spec:
+        type: ExternalName
+        externalName: "{{ digital_energy_twin_apisix_data_plane_host }}"
+        ports:
+          - port: 80
+            targetPort: 80
+  when: digital_energy_twin_enabled
+
 - name: "Digital Energy Twin: Ensure ingress for admin direct host"
   kubernetes.core.k8s:
     state: present
@@ -252,9 +272,9 @@
                   pathType: Prefix
                   backend:
                     service:
-                      name: "{{ digital_energy_twin_admin_service_name }}"
+                      name: apisix-data-plane
                       port:
-                        name: http
+                        number: 80
   when: digital_energy_twin_enabled
 
 - name: "Digital Energy Twin: Ensure ingress for public direct host"
@@ -286,9 +306,9 @@
                   pathType: Prefix
                   backend:
                     service:
-                      name: "{{ digital_energy_twin_public_service_name }}"
+                      name: apisix-data-plane
                       port:
-                        name: http
+                        number: 80
   when: digital_energy_twin_enabled
 
 - name: "Digital Energy Twin: Ensure ingress for backend direct host"
@@ -320,9 +340,9 @@
                   pathType: Prefix
                   backend:
                     service:
-                      name: "{{ digital_energy_twin_backend_service_name }}"
+                      name: apisix-data-plane
                       port:
-                        name: http
+                        number: 80
   when: digital_energy_twin_enabled
 
 - name: "Digital Energy Twin: Get IDM settings and api-access secret"
