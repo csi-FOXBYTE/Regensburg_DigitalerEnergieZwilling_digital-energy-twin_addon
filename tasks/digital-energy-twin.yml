@@ -79,9 +79,9 @@
 - name: "Digital Energy Twin: Resolve upstreams"
   set_fact:
     digital_energy_twin_admin_upstream_host: "{{ digital_energy_twin_admin_service_name }}.{{ digital_energy_twin_namespace }}.svc.cluster.local"
-    digital_energy_twin_admin_upstream_port: "{{ digital_energy_twin_admin_port }}"
+    digital_energy_twin_admin_upstream_port: "80"
     digital_energy_twin_public_upstream_host: "{{ digital_energy_twin_public_service_name }}.{{ digital_energy_twin_namespace }}.svc.cluster.local"
-    digital_energy_twin_public_upstream_port: "{{ digital_energy_twin_public_port }}"
+    digital_energy_twin_public_upstream_port: "80"
     digital_energy_twin_backend_upstream_host: "{{ digital_energy_twin_backend_service_name }}.{{ digital_energy_twin_namespace }}.svc.cluster.local"
   when: digital_energy_twin_enabled
 
