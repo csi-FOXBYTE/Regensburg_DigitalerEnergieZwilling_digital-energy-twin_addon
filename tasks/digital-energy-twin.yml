@@ -549,7 +549,7 @@
       desc: "Backend upstream for API"
       type: "roundrobin"
       scheme: "http"
-      nodes: "{{ { (digital_energy_twin_backend_upstream_host ~ ':' ~ digital_energy_twin_backend_port) : 1 } }}"
+      nodes: "{{ { (digital_energy_twin_backend_upstream_host ~ ':80') : 1 } }}"
     headers:
       Accept: application/json
       X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"

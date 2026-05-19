@@ -32,11 +32,3 @@ spec:
                 - NET_BIND_SERVICE
           ports:
             - containerPort: {{ digital_energy_twin_admin_port | int }}
-          volumeMounts:
-            - name: placeholder-content
-              mountPath: /usr/share/nginx/html/index.html
-              subPath: admin-index.html
-      volumes:
-        - name: placeholder-content
-          configMap:
-            name: digital-energy-twin-placeholder
