@@ -117,3 +117,27 @@ To run addon tasks explicitly, use tags:
 
 - `addons`
 - `addon_digital-energy-twin`
+
+## Deploy script
+
+`scripts/deploy.sh` is a helper that SSHes into your Ansible host, pulls the latest repo state, and runs the playbook.
+
+Copy `scripts/.env.example` (or create `scripts/.env`) with the following variables:
+
+```bash
+SSH_HOST=your-deploy-server
+SSH_USER=deploy
+SSH_PORT=22               # optional, defaults to 22
+ADDON_DIR=/path/to/this/addon
+PLAYBOOK_DIR=/path/to/ansible/project
+SOURCE_DIR=/path/to/venv
+INVENTORY=/path/to/inventory.yml
+PLAYBOOK_FILE=core_platform/playbook.yml
+TAGS=addon
+```
+
+Then run:
+
+```bash
+./scripts/deploy.sh
+```

@@ -18,6 +18,20 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
+      initContainers:
+        - name: migrate
+          image: "{{ digital_energy_twin_backend_image }}"
+          imagePullPolicy: Always
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          command: ["node_modules/.bin/zenstack", "migrate", "deploy"]
+          env:
+            - name: DATABASE_URL
+              value: "{{ digital_energy_twin_database_url }}"
       containers:
         - name: backend
           image: "{{ digital_energy_twin_backend_image }}"

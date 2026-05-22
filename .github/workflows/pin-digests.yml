@@ -1,0 +1,70 @@
+name: Pin Image Digests
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Image tag to resolve and pin'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - latest
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  pin-digests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up crane
+        uses: imjasonh/setup-crane@v0.4
+
+      - name: Authenticate crane to GHCR
+        run: crane auth login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve digests
+        id: digests
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          ADMIN_DIGEST=$(crane digest ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_adminfrontend:${TAG})
+          PUBLIC_DIGEST=$(crane digest ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_frontend:${TAG})
+          BACKEND_DIGEST=$(crane digest ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_backend:${TAG})
+
+          echo "admin=${ADMIN_DIGEST}" >> $GITHUB_OUTPUT
+          echo "public=${PUBLIC_DIGEST}" >> $GITHUB_OUTPUT
+          echo "backend=${BACKEND_DIGEST}" >> $GITHUB_OUTPUT
+
+      - name: Update software_references.yml
+        env:
+          ADMIN_DIGEST: ${{ steps.digests.outputs.admin }}
+          PUBLIC_DIGEST: ${{ steps.digests.outputs.public }}
+          BACKEND_DIGEST: ${{ steps.digests.outputs.backend }}
+        run: |
+          yq -i '.software.digital_energy_twin_addon.admin.digest = env(ADMIN_DIGEST)' vars/software_references.yml
+          yq -i '.software.digital_energy_twin_addon.public.digest = env(PUBLIC_DIGEST)' vars/software_references.yml
+          yq -i '.software.digital_energy_twin_addon.backend.digest = env(BACKEND_DIGEST)' vars/software_references.yml
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: pin-digests/${{ inputs.tag }}
+          title: "chore: pin ${{ inputs.tag }} image digests"
+          body: |
+            Pins all image tags to their current `${{ inputs.tag }}` digests.
+
+            | Component | Reference |
+            |-----------|-----------|
+            | admin     | `${{ steps.digests.outputs.admin }}` |
+            | public    | `${{ steps.digests.outputs.public }}` |
+            | backend   | `${{ steps.digests.outputs.backend }}` |
+          commit-message: "chore: pin ${{ inputs.tag }} image digests"
+          delete-branch: true
