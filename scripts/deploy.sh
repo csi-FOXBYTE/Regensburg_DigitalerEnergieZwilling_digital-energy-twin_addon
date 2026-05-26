@@ -12,7 +12,7 @@ fi
 : "${SOURCE_DIR:?SOURCE_DIR is required}"
 : "${INVENTORY:?INVENTORY is required}"
 : "${PLAYBOOK_FILE:?PLAYBOOK_FILE is required}"
-: "${TAGS:?TAGS is required}"
+: "${TAGS=}"
 
 echo "Pulling latest and running Ansible playbook on ${SSH_HOST}..."
 
@@ -25,7 +25,7 @@ ssh -p "${SSH_PORT:-22}" "${SSH_USER}@${SSH_HOST}" bash <<EOF
   source ${SOURCE_DIR}/bin/activate
 
   cd ${PLAYBOOK_DIR}
-  ansible-playbook ${PLAYBOOK_FILE} -i ${INVENTORY} --tags ${TAGS}
+  ansible-playbook ${PLAYBOOK_FILE} -i ${INVENTORY} ${TAGS:+--tags ${TAGS}}
 EOF
 
 echo "Done."
