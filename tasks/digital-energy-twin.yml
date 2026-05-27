@@ -581,6 +581,8 @@
           client_id: "{{ digital_energy_twin_oidc_client_id }}"
           client_secret: "{{ digital_energy_twin_client_secret_response.json.value }}"
           redirect_uri: "https://{{ digital_energy_twin_admin_direct_host }}{{ digital_energy_twin_oidc_callback_path }}"
+          logout_path: /logout
+          post_logout_redirect_uri: "https://{{ digital_energy_twin_admin_direct_host }}/"
           discovery: "{{ inv_access.platform.hostname }}/realms/{{ inv_access.tenant.realm_name }}/.well-known/openid-configuration"
           introspection_endpoint: "{{ inv_access.platform.hostname }}/realms/{{ inv_access.tenant.realm_name }}/protocol/openid-connect/token/introspect"
           introspection_endpoint_auth_method: post
