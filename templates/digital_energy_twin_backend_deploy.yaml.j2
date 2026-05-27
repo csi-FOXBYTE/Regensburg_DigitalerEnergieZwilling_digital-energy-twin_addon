@@ -49,5 +49,7 @@ spec:
               value: "{{ digital_energy_twin_database_url }}"
             - name: PORT
               value: "{{ digital_energy_twin_backend_port | string }}"
+            - name: KEYCLOAK_JWKS_URI
+              value: "{{ inv_access.platform.hostname }}/realms/{{ inv_access.tenant.realm_name }}/protocol/openid-connect/certs"
           ports:
             - containerPort: {{ digital_energy_twin_backend_port | int }}
