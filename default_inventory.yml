@@ -13,7 +13,6 @@ all:
             ns_create: true
             ns_name: "{{ ENVIRONMENT }}-digitalenergytwin"
             ns_kubeconfig: "{{ kubeconfig_file | default('kubeconfig') }}"
-            public_requires_login: true
             oidc_client_id: "digital-energy-twin"
             admin_host: "admin.det.{{ DOMAIN }}"
             public_host: "det.{{ DOMAIN }}"
