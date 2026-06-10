@@ -13,7 +13,7 @@ software:
     public:
       registry: "ghcr.io"
       repository: "csi-foxbyte/regensburg_digitalerenergiezwilling_frontend"
-      digest: "sha256:c10bcbd19cb80d5d373be8404a6be6ea0a43322e2cd9edf18e12c782d70c8dd1"
+      digest: "sha256:3b79fd32b46fc0ccabb9618fc45dee3e632ca38a9ef5bca7cb91a0cb0c291c64"
     backend:
       registry: "ghcr.io"
       repository: "csi-foxbyte/regensburg_digitalerenergiezwilling_backend"
