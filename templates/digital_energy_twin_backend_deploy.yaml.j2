@@ -87,5 +87,9 @@ spec:
               value: "{{ digital_energy_twin_backend_port | string }}"
             - name: KEYCLOAK_JWKS_URI
               value: "{{ inv_access.platform.hostname }}/realms/{{ inv_access.tenant.realm_name }}/protocol/openid-connect/certs"
+            - name: TILES_URL
+              value: "{{ digital_energy_twin_tiles_url }}"
+            - name: APP_BASE_URL
+              value: "{{ digital_energy_twin_backend_direct_host }}"
           ports:
             - containerPort: {{ digital_energy_twin_backend_port | int }}

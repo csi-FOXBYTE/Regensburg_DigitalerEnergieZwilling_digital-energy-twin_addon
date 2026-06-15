@@ -35,6 +35,7 @@ inv_addons:
     public_host: "det.{{ DOMAIN }}"
     backend_host: "api.det.{{ DOMAIN }}"
     backend_cors_additional_origins: []
+    tiles_url: "https://tiles.example.com"
 ```
 
 By default, the addon works without any `software` section in your deployment inventory.
@@ -104,6 +105,17 @@ CORS defaults to:
 - `https://{{ admin_host }}`
 
 You can extend allowed origins with `backend_cors_additional_origins`.
+
+## Backend Environment
+
+### `tiles_url`
+
+URL of the external tiles server. The backend uses this to redirect clients to the correct tile source.
+Must be set explicitly — there is no default, as this is an external service that varies per deployment.
+
+```yaml
+tiles_url: "https://tiles.example.com"
+```
 
 ## Security Requirements
 

@@ -15,10 +15,12 @@
       - digital_energy_twin.public_host is defined
       - digital_energy_twin.backend_host is defined
       - digital_energy_twin.backend_cors_additional_origins is defined
+      - digital_energy_twin.tiles_url is defined
     fail_msg: >-
       Missing required keys in inv_addons['digital-energy-twin'].
       Expected: enable, ns_create, ns_name, ns_kubeconfig, oidc_client_id,
-      admin_host, public_host, backend_host, backend_cors_additional_origins.
+      admin_host, public_host, backend_host, backend_cors_additional_origins,
+      tiles_url.
 
 - name: "Digital Energy Twin: Set defaults"
   set_fact:
@@ -43,6 +45,7 @@
     digital_energy_twin_manager_required_role: "manager"
     digital_energy_twin_maintainer_required_role: "maintainer"
     digital_energy_twin_apisix_data_plane_host: "{{ digital_energy_twin.apisix_data_plane_host | default('apisix-data-plane.' ~ ENVIRONMENT ~ '-access-stack.svc.cluster.local') }}"
+    digital_energy_twin_tiles_url: "{{ digital_energy_twin.tiles_url }}"
     digital_energy_twin_backend_common_plugins:
       cors:
         allow_origins: "{{ ((['https://' ~ digital_energy_twin.public_host, 'https://' ~ digital_energy_twin.admin_host] + digital_energy_twin.backend_cors_additional_origins) | unique) | join(',') }}"

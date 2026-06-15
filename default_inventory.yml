@@ -18,4 +18,5 @@ all:
             public_host: "det.{{ DOMAIN }}"
             backend_host: "api.det.{{ DOMAIN }}"
             backend_cors_additional_origins: []
+            tiles_url: "https://tiles.{{ DOMAIN }}"
             # apisix_data_plane_host: "apisix-data-plane.{{ ENVIRONMENT }}-access-stack.svc.cluster.local"
