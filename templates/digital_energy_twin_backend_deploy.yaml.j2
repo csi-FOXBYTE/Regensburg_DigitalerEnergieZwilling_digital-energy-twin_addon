@@ -93,3 +93,24 @@ spec:
               value: "{{ digital_energy_twin_backend_direct_host }}"
           ports:
             - containerPort: {{ digital_energy_twin_backend_port | int }}
+          startupProbe:
+            httpGet:
+              path: /health
+              port: {{ digital_energy_twin_backend_port | int }}
+            failureThreshold: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ digital_energy_twin_backend_port | int }}
+            periodSeconds: 5
+            failureThreshold: 3
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ digital_energy_twin_backend_port | int }}
+            periodSeconds: 30
+            failureThreshold: 5
+            timeoutSeconds: 10
