@@ -16,6 +16,7 @@ spec:
     spec:
       securityContext:
         runAsNonRoot: true
+        runAsUser: 1000
         seccompProfile:
           type: RuntimeDefault
       initContainers:
@@ -24,7 +25,9 @@ spec:
           imagePullPolicy: Always
           securityContext:
             runAsNonRoot: true
+            runAsUser: 1000
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
@@ -68,13 +71,18 @@ spec:
           env:
             - name: DATABASE_URL
               value: "{{ digital_energy_twin_database_url }}"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
       containers:
         - name: backend
           image: "{{ digital_energy_twin_backend_image }}"
           imagePullPolicy: Always
           securityContext:
             runAsNonRoot: true
+            runAsUser: 1000
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
@@ -90,7 +98,11 @@ spec:
             - name: TILES_URL
               value: "{{ digital_energy_twin_tiles_url }}"
             - name: APP_BASE_URL
-              value: "{{ digital_energy_twin_backend_direct_host }}"
+              value: "https://{{ digital_energy_twin_backend_direct_host }}"
+            - name: PUBLIC_CLIENT_BASE_URL
+              value: "https://{{ digital_energy_twin_public_direct_host }}"
+            - name: ADMIN_CLIENT_BASE_URL
+              value: "https://{{ digital_energy_twin_admin_direct_host }}"
           ports:
             - containerPort: {{ digital_energy_twin_backend_port | int }}
           startupProbe:
@@ -114,3 +126,9 @@ spec:
             periodSeconds: 30
             failureThreshold: 5
             timeoutSeconds: 10
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
