@@ -44,7 +44,7 @@
     digital_energy_twin_admin_required_role: "admin"
     digital_energy_twin_manager_required_role: "manager"
     digital_energy_twin_maintainer_required_role: "maintainer"
-    digital_energy_twin_apisix_data_plane_host: "{{ digital_energy_twin.apisix_data_plane_host | default('apisix-data-plane.' ~ ENVIRONMENT ~ '-access-stack.svc.cluster.local') }}"
+    digital_energy_twin_apisix_data_plane_host: "{{ digital_energy_twin.apisix_data_plane_host | default(inv_access.apisix.helm_release_name ~ '-gateway.' ~ (inv_access.apisix.ns_name | lower) ~ '.svc.cluster.local') }}"
     digital_energy_twin_tiles_url: "{{ digital_energy_twin.tiles_url }}"
     digital_energy_twin_backend_common_plugins:
       cors:
