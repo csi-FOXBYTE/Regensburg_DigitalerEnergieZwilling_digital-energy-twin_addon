@@ -362,7 +362,7 @@
 - name: "Digital Energy Twin: Create OIDC client"
   uri:
     method: POST
-    url: "{{ inv_access.platform.hostname }}/auth/admin/realms/{{ inv_access.tenant.realm_name }}/clients"
+    url: "{{ inv_access.platform.hostname }}/admin/realms/{{ inv_access.tenant.realm_name }}/clients"
     return_content: yes
     ca_path: "{{ inv_k8s.ingress.ca_path }}"
     body_format: json
@@ -394,7 +394,7 @@
 - name: "Digital Energy Twin: Refresh client list"
   uri:
     method: GET
-    url: "{{ inv_access.platform.hostname }}/auth/admin/realms/{{ inv_access.tenant.realm_name }}/clients"
+    url: "{{ inv_access.platform.hostname }}/admin/realms/{{ inv_access.tenant.realm_name }}/clients"
     return_content: yes
     ca_path: "{{ inv_k8s.ingress.ca_path }}"
     headers:
@@ -414,7 +414,7 @@
 - name: "Digital Energy Twin: Get existing OIDC client details"
   uri:
     method: GET
-    url: "{{ inv_access.platform.hostname }}/auth/admin/realms/{{ inv_access.tenant.realm_name }}/clients/{{ digital_energy_twin_client_internal_id }}"
+    url: "{{ inv_access.platform.hostname }}/admin/realms/{{ inv_access.tenant.realm_name }}/clients/{{ digital_energy_twin_client_internal_id }}"
     return_content: yes
     ca_path: "{{ inv_k8s.ingress.ca_path }}"
     headers:
@@ -427,7 +427,7 @@
 - name: "Digital Energy Twin: Update OIDC client redirect/web origins"
   uri:
     method: PUT
-    url: "{{ inv_access.platform.hostname }}/auth/admin/realms/{{ inv_access.tenant.realm_name }}/clients/{{ digital_energy_twin_client_internal_id }}"
+    url: "{{ inv_access.platform.hostname }}/admin/realms/{{ inv_access.tenant.realm_name }}/clients/{{ digital_energy_twin_client_internal_id }}"
     return_content: yes
     ca_path: "{{ inv_k8s.ingress.ca_path }}"
     body_format: json
@@ -452,7 +452,7 @@
 - name: "Digital Energy Twin: Get OIDC client secret"
   uri:
     method: GET
-    url: "{{ inv_access.platform.hostname }}/auth/admin/realms/{{ inv_access.tenant.realm_name }}/clients/{{ digital_energy_twin_client_internal_id }}/client-secret"
+    url: "{{ inv_access.platform.hostname }}/admin/realms/{{ inv_access.tenant.realm_name }}/clients/{{ digital_energy_twin_client_internal_id }}/client-secret"
     return_content: yes
     ca_path: "{{ inv_k8s.ingress.ca_path }}"
     headers:
@@ -465,7 +465,7 @@
 - name: "Digital Energy Twin: Ensure OIDC client role admin"
   uri:
     method: POST
-    url: "{{ inv_access.platform.hostname }}/auth/admin/realms/{{ inv_access.tenant.realm_name }}/clients/{{ digital_energy_twin_client_internal_id }}/roles"
+    url: "{{ inv_access.platform.hostname }}/admin/realms/{{ inv_access.tenant.realm_name }}/clients/{{ digital_energy_twin_client_internal_id }}/roles"
     return_content: yes
     ca_path: "{{ inv_k8s.ingress.ca_path }}"
     body_format: json
@@ -484,7 +484,7 @@
 - name: "Digital Energy Twin: Delete legacy OIDC client role viewer"
   uri:
     method: DELETE
-    url: "{{ inv_access.platform.hostname }}/auth/admin/realms/{{ inv_access.tenant.realm_name }}/clients/{{ digital_energy_twin_client_internal_id }}/roles/viewer"
+    url: "{{ inv_access.platform.hostname }}/admin/realms/{{ inv_access.tenant.realm_name }}/clients/{{ digital_energy_twin_client_internal_id }}/roles/viewer"
     ca_path: "{{ inv_k8s.ingress.ca_path }}"
     headers:
       Accept: application/json
@@ -497,7 +497,7 @@
 - name: "Digital Energy Twin: Ensure OIDC client role manager (Verwalter)"
   uri:
     method: POST
-    url: "{{ inv_access.platform.hostname }}/auth/admin/realms/{{ inv_access.tenant.realm_name }}/clients/{{ digital_energy_twin_client_internal_id }}/roles"
+    url: "{{ inv_access.platform.hostname }}/admin/realms/{{ inv_access.tenant.realm_name }}/clients/{{ digital_energy_twin_client_internal_id }}/roles"
     return_content: yes
     ca_path: "{{ inv_k8s.ingress.ca_path }}"
     body_format: json
@@ -517,7 +517,7 @@
 - name: "Digital Energy Twin: Ensure OIDC client role maintainer (Systempfleger)"
   uri:
     method: POST
-    url: "{{ inv_access.platform.hostname }}/auth/admin/realms/{{ inv_access.tenant.realm_name }}/clients/{{ digital_energy_twin_client_internal_id }}/roles"
+    url: "{{ inv_access.platform.hostname }}/admin/realms/{{ inv_access.tenant.realm_name }}/clients/{{ digital_energy_twin_client_internal_id }}/roles"
     return_content: yes
     ca_path: "{{ inv_k8s.ingress.ca_path }}"
     body_format: json
