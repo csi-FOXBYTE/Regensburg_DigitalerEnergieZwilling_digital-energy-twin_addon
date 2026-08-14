@@ -29,7 +29,6 @@ inv_addons:
     ns_create: true
     ns_name: "{{ ENVIRONMENT }}-digitalenergytwin"
     ns_kubeconfig: "{{ kubeconfig_file }}"
-    public_requires_login: true
     oidc_client_id: "digital-energy-twin"
     admin_host: "admin.det.{{ DOMAIN }}"
     public_host: "det.{{ DOMAIN }}"
@@ -61,33 +60,37 @@ Namespace behavior:
 
 `admin_host`:
 
-- `/*` -> admin frontend
-- `/api/*` -> backend (OIDC required + role `admin`)
+- `/*` -> admin frontend (OIDC required + one of `admin`, `manager`, or `maintainer`)
+- `/api/*` -> backend (OIDC required + one of `admin`, `manager`, or `maintainer`)
 
 `public_host`:
 
-- `/*` -> public frontend
-- `/api/*` -> backend (OIDC required + role `viewer`) when `public_requires_login: true`
-- `/api/*` -> backend (open, no OIDC) when `public_requires_login: false`
+- `/*` -> public frontend (open, no OIDC)
+- `/api/admin/*` -> blocked
+- `/api/*` -> backend (open, no OIDC)
 
 `backend_host`:
 
-- `/api/public/*` -> open
+- `/api/admin/*` -> protected with APISIX `openid-connect` and one of `admin`, `manager`, or `maintainer`
+- `/api/*` -> open, except for the higher-priority `/api/admin/*` route
 - `/docs` -> open
 - `/docs/*` -> open
-- `/api/admin/*` -> protected with APISIX `openid-connect` (auth at gateway, no explicit role check in APISIX)
 
-### Frontend role checks
+### OIDC client roles and route checks
 
 The addon ensures client roles exist in Keycloak for the OIDC client:
 
 - `admin`
-- `viewer`
+- `manager`
+- `maintainer`
 
-Role checks on frontend routes in APISIX:
+The obsolete `viewer` client role is removed during deployment.
 
-- `admin_host /api/*` requires role `admin`
-- `public_host /api/*` requires role `viewer` when `public_requires_login: true`
+Role checks in APISIX:
+
+- `admin_host /*` and `admin_host /api/*` require at least one of `admin`, `manager`, or `maintainer`
+- `backend_host /api/admin/*` requires at least one of `admin`, `manager`, or `maintainer`
+- `public_host` is open, while `/api/admin/*` is explicitly blocked on that host
 
 Note: roles are created automatically, but user/group role assignments are not managed by this addon.
 
