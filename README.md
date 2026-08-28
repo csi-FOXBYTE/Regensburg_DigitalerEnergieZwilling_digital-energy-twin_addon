@@ -35,6 +35,7 @@ inv_addons:
     backend_host: "api.det.{{ DOMAIN }}"
     backend_cors_additional_origins: []
     tiles_url: "https://tiles.example.com"
+    terrain_url: "https://terrain.example.com"
 ```
 
 By default, the addon works without any `software` section in your deployment inventory.
@@ -113,11 +114,23 @@ You can extend allowed origins with `backend_cors_additional_origins`.
 
 ### `tiles_url`
 
-URL of the external tiles server. The backend uses this to redirect clients to the correct tile source.
+Base URL of the external tiles server. The backend publishes this base URL
+to the public frontend through the map-resources endpoint and retains the
+legacy tile redirect route for compatibility.
 Must be set explicitly — there is no default, as this is an external service that varies per deployment.
 
 ```yaml
 tiles_url: "https://tiles.example.com"
+```
+
+### `terrain_url`
+
+Base URL of the external Cesium terrain server. The backend publishes it to
+the public frontend through the map-resources endpoint and retains the legacy
+terrain redirect route for compatibility.
+
+```yaml
+terrain_url: "https://terrain.example.com"
 ```
 
 ## Security Requirements

@@ -97,6 +97,8 @@ spec:
               value: "{{ inv_access.platform.hostname }}/realms/{{ inv_access.tenant.realm_name }}/protocol/openid-connect/certs"
             - name: TILES_URL
               value: "{{ digital_energy_twin_tiles_url }}"
+            - name: TERRAIN_URL
+              value: "{{ digital_energy_twin_terrain_url }}"
             - name: APP_BASE_URL
               value: "https://{{ digital_energy_twin_backend_direct_host }}"
             - name: PUBLIC_CLIENT_BASE_URL
