@@ -36,6 +36,7 @@ inv_addons:
     backend_cors_additional_origins: []
     tiles_url: "https://tiles.example.com"
     terrain_url: "https://terrain.example.com"
+    address_database_url: "https://tiles.example.com/det-rg-addresses.sqlite"
 ```
 
 By default, the addon works without any `software` section in your deployment inventory.
@@ -131,6 +132,16 @@ terrain redirect route for compatibility.
 
 ```yaml
 terrain_url: "https://terrain.example.com"
+```
+
+### `address_database_url`
+
+URL of the SQLite address database downloaded by the public frontend. The
+backend publishes it together with the tiles and terrain URLs through the
+map-resources endpoint.
+
+```yaml
+address_database_url: "https://tiles.example.com/det-rg-addresses.sqlite"
 ```
 
 ## Security Requirements

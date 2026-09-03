@@ -20,4 +20,5 @@ all:
             backend_cors_additional_origins: []
             tiles_url: "https://tiles.{{ DOMAIN }}"
             terrain_url: "https://terrain.{{ DOMAIN }}"
+            address_database_url: "https://tiles.{{ DOMAIN }}/det-rg-addresses.sqlite"
             # apisix_data_plane_host: "apisix-data-plane.{{ ENVIRONMENT }}-access-stack.svc.cluster.local"
