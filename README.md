@@ -41,9 +41,7 @@ inv_addons:
 
 By default, the addon works without any `software` section in your deployment inventory.
 Container images are resolved from [vars/software_references.yml](vars/software_references.yml)
-as single source of truth.
-Optional per-environment overrides are still possible by setting
-`admin_image`, `public_image`, or `backend_image` in `inv_addons.digital-energy-twin`.
+as the single source of truth.
 
 ### Database
 

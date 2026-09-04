@@ -1,11 +1,6 @@
 ---
 software:
-  digital_energy_twin_addon:
-    helm_chart_name: ""
-    helm_release_name: ""
-    helm_repo_name: ""
-    helm_repo_url: ""
-    helm_chart_version: ""
+  digital-energy-twin:
     admin:
       registry: "ghcr.io"
       repository: "csi-foxbyte/regensburg_digitalerenergiezwilling_adminfrontend"

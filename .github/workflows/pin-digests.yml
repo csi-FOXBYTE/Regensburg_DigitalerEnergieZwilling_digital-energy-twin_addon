@@ -48,9 +48,9 @@ jobs:
           PUBLIC_DIGEST: ${{ steps.digests.outputs.public }}
           BACKEND_DIGEST: ${{ steps.digests.outputs.backend }}
         run: |
-          yq -i '.software.digital_energy_twin_addon.admin.digest = env(ADMIN_DIGEST)' vars/software_references.yml
-          yq -i '.software.digital_energy_twin_addon.public.digest = env(PUBLIC_DIGEST)' vars/software_references.yml
-          yq -i '.software.digital_energy_twin_addon.backend.digest = env(BACKEND_DIGEST)' vars/software_references.yml
+          yq -i '.software."digital-energy-twin".admin.digest = env(ADMIN_DIGEST)' vars/software_references.yml
+          yq -i '.software."digital-energy-twin".public.digest = env(PUBLIC_DIGEST)' vars/software_references.yml
+          yq -i '.software."digital-energy-twin".backend.digest = env(BACKEND_DIGEST)' vars/software_references.yml
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v7
