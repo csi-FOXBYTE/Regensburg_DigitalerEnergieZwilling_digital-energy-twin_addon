@@ -34,43 +34,13 @@ spec:
           command:
             - /bin/sh
             - -c
-            - |
-              node_modules/.bin/zenstack migrate deploy && exit 0
-
-              node << 'EOF'
-              const { Client } = require('pg');
-              (async () => {
-                const client = new Client({ connectionString: process.env.DATABASE_URL });
-                await client.connect();
-                const res = await client.query("SELECT tablename FROM pg_tables WHERE schemaname = 'public'");
-                const tables = res.rows.map(r => r.tablename);
-                if (tables.length === 1 && tables[0] === 'postgres_log') {
-                  await client.query(`CREATE TABLE _prisma_migrations (
-                    id CHARACTER VARYING(36) NOT NULL,
-                    checksum CHARACTER VARYING(64) NOT NULL,
-                    finished_at TIMESTAMP WITH TIME ZONE,
-                    migration_name CHARACTER VARYING(255) NOT NULL,
-                    logs TEXT,
-                    rolled_back_at TIMESTAMP WITH TIME ZONE,
-                    started_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
-                    applied_steps_count INTEGER NOT NULL DEFAULT 0,
-                    CONSTRAINT _prisma_migrations_pkey PRIMARY KEY (id)
-                  )`);
-                  console.log('Only postgres_log present — created _prisma_migrations, retrying.');
-                  await client.end();
-                  process.exit(0);
-                } else {
-                  console.error('Unexpected tables in public schema:', tables.join(', '));
-                  await client.end();
-                  process.exit(1);
-                }
-              })().catch(e => { console.error(e.message); process.exit(1); });
-              EOF
-
-              [ $? -eq 0 ] && node_modules/.bin/zenstack migrate deploy
+            - exec node_modules/.bin/zenstack migrate deploy
           env:
             - name: DATABASE_URL
-              value: "{{ digital_energy_twin_database_url }}"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ digital_energy_twin_database_secret_name }}"
+                  key: DATABASE_URL
           volumeMounts:
             - name: tmp
               mountPath: /tmp
@@ -90,7 +60,10 @@ spec:
                 - NET_BIND_SERVICE
           env:
             - name: DATABASE_URL
-              value: "{{ digital_energy_twin_database_url }}"
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ digital_energy_twin_database_secret_name }}"
+                  key: DATABASE_URL
             - name: PORT
               value: "{{ digital_energy_twin_backend_port | string }}"
             - name: KEYCLOAK_JWKS_URI

@@ -21,4 +21,13 @@ all:
             tiles_url: "https://tiles.{{ DOMAIN }}"
             terrain_url: "https://terrain.{{ DOMAIN }}"
             address_database_url: "https://tiles.{{ DOMAIN }}/det-rg-addresses.sqlite"
+            # If db is omitted, the addon creates and uses the digital_energy_twin
+            # database with a dedicated owner user on the platform central-db.
+            # Define db only to use a database managed by the platform operator:
+            # db:
+            #   ns_name: "{{ ENVIRONMENT }}-databases"
+            #   db_address: "postgres.{{ ENVIRONMENT }}-databases.svc.cluster.local"
+            #   db_name: "digital_energy_twin"
+            #   port: "5432"
+            #   user_k8s_secret: "digital-energy-twin.credentials"
             # apisix_data_plane_host: "apisix-data-plane.{{ ENVIRONMENT }}-access-stack.svc.cluster.local"

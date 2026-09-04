@@ -24,6 +24,37 @@
       admin_host, public_host, backend_host, backend_cors_additional_origins,
       tiles_url, terrain_url, address_database_url.
 
+- name: "Digital Energy Twin: Validate managed database config"
+  ansible.builtin.assert:
+    that:
+      - digital_energy_twin.db is mapping
+      - digital_energy_twin.db.ns_name is defined
+      - digital_energy_twin.db.ns_name | length > 0
+      - digital_energy_twin.db.db_address is defined
+      - digital_energy_twin.db.db_address | length > 0
+      - digital_energy_twin.db.db_name is defined
+      - digital_energy_twin.db.db_name | length > 0
+      - digital_energy_twin.db.user_k8s_secret is defined
+      - digital_energy_twin.db.user_k8s_secret | length > 0
+    fail_msg: >-
+      inv_addons['digital-energy-twin'].db selects a managed database.
+      Expected: ns_name, db_address, db_name, and user_k8s_secret.
+      port is optional and defaults to 5432.
+  when: digital_energy_twin.db is defined
+
+- name: "Digital Energy Twin: Validate central database config"
+  ansible.builtin.assert:
+    that:
+      - inv_central_db is defined
+      - inv_central_db.enable is defined
+      - inv_central_db.enable | bool
+      - inv_central_db.ns_name is defined
+      - inv_central_db.ns_name | length > 0
+    fail_msg: >-
+      The default database mode requires the platform central-db to be enabled.
+      Define inv_addons['digital-energy-twin'].db to use a managed database instead.
+  when: digital_energy_twin.db is not defined
+
 - name: "Digital Energy Twin: Set defaults"
   set_fact:
     digital_energy_twin_enabled: "{{ digital_energy_twin.enable | bool }}"
@@ -37,9 +68,7 @@
     digital_energy_twin_admin_image: "{{ digital_energy_twin.admin_image | default(software.digital_energy_twin_addon.admin.registry ~ '/' ~ software.digital_energy_twin_addon.admin.repository ~ '@' ~ software.digital_energy_twin_addon.admin.digest) }}"
     digital_energy_twin_public_image: "{{ digital_energy_twin.public_image | default(software.digital_energy_twin_addon.public.registry ~ '/' ~ software.digital_energy_twin_addon.public.repository ~ '@' ~ software.digital_energy_twin_addon.public.digest) }}"
     digital_energy_twin_backend_image: "{{ digital_energy_twin.backend_image | default(software.digital_energy_twin_addon.backend.registry ~ '/' ~ software.digital_energy_twin_addon.backend.repository ~ '@' ~ software.digital_energy_twin_addon.backend.digest) }}"
-    digital_energy_twin_db_host: "central-db.{{ inv_central_db.ns_name }}.svc.cluster.local"
-    digital_energy_twin_db_port: "{{ inv_central_db.port }}"
-    digital_energy_twin_db_name: "postgres"
+    digital_energy_twin_database_secret_name: "digital-energy-twin-database"
     digital_energy_twin_backend_port: "{{ digital_energy_twin.backend_port | default(5000) | int }}"
     digital_energy_twin_admin_port: "{{ digital_energy_twin.admin_port | default(8080) | int }}"
     digital_energy_twin_public_port: "{{ digital_energy_twin.public_port | default(8080) | int }}"
@@ -128,27 +157,92 @@
       Create the namespace manually or set inv_addons['digital-energy-twin'].ns_create to true.
   when: digital_energy_twin_enabled and not digital_energy_twin_ns_create
 
-- name: "Digital Energy Twin: Get central DB credentials secret"
-  kubernetes.core.k8s_info:
-    kind: Secret
+- name: "Digital Energy Twin: Ensure database and owner user exist on central DB"
+  kubernetes.core.k8s:
+    state: present
     namespace: "{{ inv_central_db.ns_name }}"
     kubeconfig: "{{ k8s_config }}"
     context: "{{ k8s_context }}"
-    name: postgres.central-db.credentials.postgresql.acid.zalan.do
+    definition:
+      apiVersion: acid.zalan.do/v1
+      kind: postgresql
+      metadata:
+        name: central-db
+        namespace: "{{ inv_central_db.ns_name }}"
+      spec:
+        preparedDatabases:
+          digital_energy_twin:
+            defaultUsers: true
+            schemas:
+              public:
+                defaultRoles: false
+  when: digital_energy_twin_enabled and digital_energy_twin.db is not defined
+
+- name: "Digital Energy Twin: Select central database"
+  ansible.builtin.set_fact:
+    digital_energy_twin_db_host: "central-db.{{ inv_central_db.ns_name }}.svc.cluster.local"
+    digital_energy_twin_db_port: "{{ inv_central_db.port | default('5432') }}"
+    digital_energy_twin_db_name: "digital_energy_twin"
+    digital_energy_twin_db_secret_namespace: "{{ inv_central_db.ns_name }}"
+    digital_energy_twin_db_secret_name: "digital-energy-twin-owner-user.central-db.credentials.postgresql.acid.zalan.do"
+  when: digital_energy_twin_enabled and digital_energy_twin.db is not defined
+
+- name: "Digital Energy Twin: Select managed database"
+  ansible.builtin.set_fact:
+    digital_energy_twin_db_host: "{{ digital_energy_twin.db.db_address }}"
+    digital_energy_twin_db_port: "{{ digital_energy_twin.db.port | default('5432') }}"
+    digital_energy_twin_db_name: "{{ digital_energy_twin.db.db_name }}"
+    digital_energy_twin_db_secret_namespace: "{{ digital_energy_twin.db.ns_name }}"
+    digital_energy_twin_db_secret_name: "{{ digital_energy_twin.db.user_k8s_secret }}"
+  when: digital_energy_twin_enabled and digital_energy_twin.db is defined
+
+- name: "Digital Energy Twin: Get database application credentials secret"
+  kubernetes.core.k8s_info:
+    kind: Secret
+    namespace: "{{ digital_energy_twin_db_secret_namespace }}"
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    name: "{{ digital_energy_twin_db_secret_name }}"
   register: digital_energy_twin_db_secret
+  until: digital_energy_twin_db_secret.resources | length > 0
+  retries: 30
+  delay: 10
+  when: digital_energy_twin_enabled
+  no_log: true
+
+- name: "Digital Energy Twin: Validate database application credentials secret"
+  ansible.builtin.assert:
+    that:
+      - digital_energy_twin_db_secret.resources[0].data.username is defined
+      - digital_energy_twin_db_secret.resources[0].data.password is defined
+    fail_msg: >-
+      Database credentials Secret '{{ digital_energy_twin_db_secret_name }}' must
+      contain the keys 'username' and 'password'.
   when: digital_energy_twin_enabled
 
-- name: "Digital Energy Twin: Set DB credentials from internal DB"
-  set_fact:
-    digital_energy_twin_db_user: "{{ digital_energy_twin_db_secret.resources[0].data.username | b64decode }}"
-    digital_energy_twin_db_password: "{{ digital_energy_twin_db_secret.resources[0].data.password | b64decode }}"
+- name: "Digital Energy Twin: Build database URL from application credentials"
+  ansible.builtin.set_fact:
+    digital_energy_twin_database_url: >-
+      postgresql://{{ digital_energy_twin_db_secret.resources[0].data.username | b64decode | urlencode | replace('/', '%2F') }}:{{ digital_energy_twin_db_secret.resources[0].data.password | b64decode | urlencode | replace('/', '%2F') }}@{{ digital_energy_twin_db_host }}:{{ digital_energy_twin_db_port }}/{{ digital_energy_twin_db_name | urlencode | replace('/', '%2F') }}
   when: digital_energy_twin_enabled
-  failed_when: digital_energy_twin_db_secret.resources | length == 0
+  no_log: true
 
-- name: "Digital Energy Twin: Build backend database URL"
-  set_fact:
-    digital_energy_twin_database_url: "postgresql://{{ digital_energy_twin_db_user }}:{{ digital_energy_twin_db_password }}@{{ digital_energy_twin_db_host }}:{{ digital_energy_twin_db_port }}/{{ digital_energy_twin_db_name }}"
+- name: "Digital Energy Twin: Store database URL in addon namespace"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: "{{ digital_energy_twin_database_secret_name }}"
+      type: Opaque
+      stringData:
+        DATABASE_URL: "{{ digital_energy_twin_database_url }}"
   when: digital_energy_twin_enabled
+  no_log: true
 
 - name: "Digital Energy Twin: Ensure placeholder content configmap"
   kubernetes.core.k8s:

@@ -45,6 +45,40 @@ as single source of truth.
 Optional per-environment overrides are still possible by setting
 `admin_image`, `public_image`, or `backend_image` in `inv_addons.digital-energy-twin`.
 
+### Database
+
+If `inv_addons.digital-energy-twin.db` is omitted, the addon uses the platform
+`central-db`. It declaratively creates a `digital_energy_twin` database and a
+dedicated owner user through the Zalando Postgres operator. The backend does not
+use the `postgres` database or its superuser credentials.
+
+To use a database managed by the platform operator, define `db` explicitly:
+
+```yaml
+inv_addons:
+  digital-energy-twin:
+    db:
+      ns_name: "dev-databases"
+      db_address: "postgres.dev-databases.svc.cluster.local"
+      db_name: "digital_energy_twin"
+      port: "5432"
+      user_k8s_secret: "digital-energy-twin.credentials"
+```
+
+`ns_name`, `db_address`, `db_name`, and `user_k8s_secret` are required in
+managed mode. `port` is optional and defaults to `5432`. The referenced Secret
+must contain the keys `username` and `password`. The database and user must
+already exist; managed mode does not modify the supplied PostgreSQL server.
+
+In both modes, the addon copies the assembled connection URL into the
+`digital-energy-twin-database` Secret in its own namespace. The backend and its
+migration init container consume `DATABASE_URL` through `secretKeyRef`.
+
+Existing installations that used the `postgres` database must migrate any data
+that should be retained before switching. The addon initializes the new logical
+database through the normal backend migrations, but it does not copy or delete
+tables from the old `postgres` database.
+
 Namespace behavior:
 
 - `ns_create: true` -> addon creates the namespace if missing
