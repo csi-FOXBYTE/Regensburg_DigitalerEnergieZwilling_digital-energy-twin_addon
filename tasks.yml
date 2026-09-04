@@ -2,7 +2,7 @@
 - name: Include vars
   include_vars:
     dir: vars
-  tags: ["addons"]
+  tags: ["addons", "addon_digital-energy-twin"]
 
 - name: Setup Digital Energy Twin
   import_tasks: tasks/digital-energy-twin.yml

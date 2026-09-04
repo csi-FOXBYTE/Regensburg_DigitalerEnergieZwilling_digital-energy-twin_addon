@@ -185,11 +185,11 @@ address_database_url: "https://tiles.example.com/det-rg-addresses.sqlite"
 
 ## Execute
 
-Run the normal Civitas Core playbook.  
-To run addon tasks explicitly, use tags:
+Run the normal Civitas Core playbook. To run addon tasks explicitly, use one of
+these tags:
 
-- `addons`
-- `addon_digital-energy-twin`
+- `addons` for all configured addons
+- `addon_digital-energy-twin` for this addon only
 
 ## Deploy script
 
@@ -206,8 +206,11 @@ PLAYBOOK_DIR=/path/to/ansible/project
 SOURCE_DIR=/path/to/venv
 INVENTORY=/path/to/inventory.yml
 PLAYBOOK_FILE=core_platform/playbook.yml
-TAGS=addon
+TAGS=addons
 ```
+
+Leave `TAGS` empty to run the complete platform playbook. `TAGS=addons` runs all
+addons configured in `inv_addons.addons`.
 
 Then run:
 
