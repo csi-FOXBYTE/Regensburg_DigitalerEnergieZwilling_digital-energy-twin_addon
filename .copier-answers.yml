@@ -3,4 +3,9 @@
 # ----------------------------------------
 
 ---
-_src_path: /tmp/addon-template/copier-template
+_commit: 538b1c90dd8f6f10674b2c6ef35045908f76504b
+_src_path: https://gitlab.com/civitas-connect/civitas-core/civitas-core-v1/addon-template.git
+addonName: Digital Energy Twin
+addonSlug: digital-energy-twin
+addonStack: digital-energy-twin
+helmInstall: false
