@@ -215,3 +215,39 @@ Then run:
 ```bash
 ./scripts/deploy.sh
 ```
+
+## Software bill of materials
+
+The checked-in [`SBOM.cdx.json`](SBOM.cdx.json) is a CycloneDX 1.6 inventory;
+[`SBOM.csv`](SBOM.csv) provides the same components in a review-friendly table.
+It covers the addon, all three digest-pinned application images, the software
+needed to execute its Ansible tasks, and the platform services the deployed app
+directly uses. The application inventories remain separate CycloneDX documents
+under `sboms/`; the addon SBOM connects them to the corresponding containers
+with hashed BOM-Link references.
+
+Generate both files with isolated Python tooling:
+
+```bash
+python3 -m venv .sbom-env
+.sbom-env/bin/python -m pip install -r requirements-sbom.txt
+.sbom-env/bin/python scripts/generate_sbom.py
+```
+
+Container references are read directly from `vars/software_references.yml`.
+Update `sbom.config.json` whenever the addon's control-plane or platform
+integrations change; the generator fails if a new image key has no SBOM entry.
+Set `SBOM_REQUIRE_CHILD_BOMS=1` to require all three verified child documents.
+
+The manually triggered **Prepare application release** workflow accepts an
+application image tag and an optional addon release tag. If the release tag is
+empty, it selects the next minor semantic version (or `v0.1.0` when no release
+tag exists). It resolves the image digests, verifies their signed CycloneDX
+attestations, bundles the child SBOMs, updates the addon version and references,
+and opens a draft pull request for review. It never merges the pull request or
+creates the Git tag. After merging, create the selected addon tag manually.
+
+The repository or organization must allow `GITHUB_TOKEN` to create pull
+requests. `.copier-answers.yml` is deliberately not changed by the release
+workflow: its `_commit` value tracks the Civitas addon-template revision rather
+than the addon release version.

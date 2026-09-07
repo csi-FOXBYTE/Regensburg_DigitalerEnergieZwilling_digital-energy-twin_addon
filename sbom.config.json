@@ -1,0 +1,179 @@
+{
+  "releaseTag": "unversioned",
+  "repositorySlug": "csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon",
+  "rootComponent": {
+    "type": "application",
+    "bom-ref": "pkg:generic/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon@unversioned",
+    "name": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon",
+    "version": "unversioned",
+    "description": "Civitas Core addon that deploys and integrates the Regensburg digital energy twin application.",
+    "licenses": [
+      {
+        "license": {
+          "id": "LGPL-3.0-or-later"
+        }
+      }
+    ],
+    "purl": "pkg:generic/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon@unversioned"
+  },
+  "imageComponents": [
+    {
+      "sourceKey": "admin",
+      "sbomPath": "sboms/admin.cdx.json",
+      "attestationRepository": "csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_AdminFrontend",
+      "relationship": "deployed application container",
+      "notes": "Admin frontend image deployed by the addon; its verified, digest-bound SBOM is maintained as a modular child BOM.",
+      "license": "LGPL-3.0-or-later"
+    },
+    {
+      "sourceKey": "public",
+      "sbomPath": "sboms/public.cdx.json",
+      "attestationRepository": "csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_Frontend",
+      "relationship": "deployed application container",
+      "notes": "Public frontend image deployed by the addon; its verified, digest-bound SBOM is maintained as a modular child BOM.",
+      "license": "LGPL-3.0-or-later"
+    },
+    {
+      "sourceKey": "backend",
+      "sbomPath": "sboms/backend.cdx.json",
+      "attestationRepository": "csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_Backend",
+      "relationship": "deployed application container",
+      "notes": "Backend image used for database migration and application runtime; its verified, digest-bound SBOM is maintained as a modular child BOM.",
+      "license": "LGPL-3.0-or-later"
+    }
+  ],
+  "additionalComponents": [
+    {
+      "type": "application",
+      "bom-ref": "component:civitas-core@not-pinned",
+      "name": "Civitas Core",
+      "version": "not pinned",
+      "scope": "required",
+      "ecosystem": "deployment platform",
+      "relationship": "required addon host platform",
+      "metadataSource": ".copier-answers.yml and tasks.yml",
+      "notes": "The addon consumes Civitas Core inventory, shared access tasks, and platform services; the host version is selected by the deployment.",
+      "license": "NOASSERTION"
+    },
+    {
+      "type": "application",
+      "bom-ref": "pkg:pypi/ansible-core@not-pinned",
+      "name": "ansible-core",
+      "version": "not pinned",
+      "scope": "required",
+      "ecosystem": "PyPI",
+      "relationship": "required deployment execution dependency",
+      "metadataSource": "tasks.yml and tasks/digital-energy-twin.yml",
+      "notes": "Executes the addon playbook; the version is supplied by the Civitas Core control environment.",
+      "license": "GPL-3.0-or-later"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:ansible/kubernetes.core@not-pinned",
+      "name": "kubernetes.core",
+      "version": "not pinned",
+      "scope": "required",
+      "ecosystem": "Ansible Galaxy collection",
+      "relationship": "required deployment execution dependency",
+      "metadataSource": "tasks/digital-energy-twin.yml",
+      "notes": "Provides the k8s and k8s_info modules used throughout the addon; the version is supplied by the Civitas Core control environment.",
+      "license": "GPL-3.0-or-later"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/jmespath@not-pinned",
+      "name": "jmespath",
+      "version": "not pinned",
+      "scope": "required",
+      "ecosystem": "PyPI",
+      "relationship": "required deployment execution dependency",
+      "metadataSource": "tasks/digital-energy-twin.yml",
+      "notes": "Required by the Ansible json_query filter used to select Keycloak clients; the version is supplied by the control environment.",
+      "license": "MIT"
+    },
+    {
+      "type": "operating-system",
+      "bom-ref": "component:kubernetes@not-pinned",
+      "name": "Kubernetes",
+      "version": "not pinned",
+      "scope": "required",
+      "ecosystem": "cluster platform",
+      "relationship": "required application runtime platform",
+      "metadataSource": "tasks/digital-energy-twin.yml and templates/",
+      "notes": "Runs the Deployments, Services, Secrets, ConfigMaps, and Ingress resources created by the addon; the cluster version is deployment-specific.",
+      "license": "Apache-2.0"
+    },
+    {
+      "type": "application",
+      "bom-ref": "component:ingress-nginx@not-pinned",
+      "name": "ingress-nginx",
+      "version": "not pinned",
+      "scope": "required",
+      "ecosystem": "Kubernetes controller",
+      "relationship": "required ingress integration",
+      "metadataSource": "tasks/digital-energy-twin.yml",
+      "notes": "The addon creates Ingress resources with NGINX-specific annotations; the controller version is supplied by the platform.",
+      "license": "Apache-2.0"
+    },
+    {
+      "type": "application",
+      "bom-ref": "component:cert-manager@not-pinned",
+      "name": "cert-manager",
+      "version": "not pinned",
+      "scope": "required",
+      "ecosystem": "Kubernetes controller",
+      "relationship": "required TLS certificate integration",
+      "metadataSource": "tasks/digital-energy-twin.yml",
+      "notes": "Issues certificates for the three TLS Ingress resources through the configured cluster issuer; the version is supplied by the platform.",
+      "license": "Apache-2.0"
+    },
+    {
+      "type": "application",
+      "bom-ref": "component:apache-apisix@not-pinned",
+      "name": "Apache APISIX",
+      "version": "not pinned",
+      "scope": "required",
+      "ecosystem": "gateway service",
+      "relationship": "required application gateway and policy integration",
+      "metadataSource": "tasks/digital-energy-twin.yml",
+      "notes": "Routes frontend and backend traffic and enforces OIDC, role, CORS, rate-limit, and response-header policies; the version is supplied by Civitas Core.",
+      "license": "Apache-2.0"
+    },
+    {
+      "type": "application",
+      "bom-ref": "component:keycloak@not-pinned",
+      "name": "Keycloak",
+      "version": "not pinned",
+      "scope": "required",
+      "ecosystem": "identity service",
+      "relationship": "required identity and access management integration",
+      "metadataSource": "tasks/digital-energy-twin.yml",
+      "notes": "Provides the OIDC client, roles, client secret, discovery metadata, and token introspection used by the application; the version is supplied by Civitas Core.",
+      "license": "Apache-2.0"
+    },
+    {
+      "type": "application",
+      "bom-ref": "component:postgresql@not-pinned",
+      "name": "PostgreSQL",
+      "version": "not pinned",
+      "scope": "required",
+      "ecosystem": "database service",
+      "relationship": "required backend data store",
+      "metadataSource": "tasks/digital-energy-twin.yml",
+      "notes": "Stores backend application data in either the platform central database or a separately managed database; the server version is deployment-specific.",
+      "license": "PostgreSQL"
+    },
+    {
+      "type": "application",
+      "bom-ref": "component:postgres-operator@not-pinned",
+      "name": "Zalando Postgres Operator",
+      "version": "not pinned",
+      "scope": "optional",
+      "ecosystem": "Kubernetes operator",
+      "relationship": "default database provisioning integration",
+      "metadataSource": "tasks/digital-energy-twin.yml",
+      "notes": "Reconciles the acid.zalan.do/v1 postgresql resource used in the default central-database mode; not used when a managed database is configured.",
+      "license": "MIT"
+    }
+  ]
+}

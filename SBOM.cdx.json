@@ -1,0 +1,673 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "serialNumber": "urn:uuid:4fe7fe89-31aa-5441-b387-91ec4b57bd20",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-09-07T12:55:50.859368Z",
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "name": "repository SBOM generation script",
+          "version": "1"
+        }
+      ]
+    },
+    "component": {
+      "type": "application",
+      "bom-ref": "pkg:generic/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon@unversioned",
+      "name": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon",
+      "version": "unversioned",
+      "description": "Civitas Core addon that deploys and integrates the Regensburg digital energy twin application.",
+      "licenses": [
+        {
+          "license": {
+            "id": "LGPL-3.0-or-later"
+          }
+        }
+      ],
+      "purl": "pkg:generic/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon@unversioned",
+      "properties": [
+        {
+          "name": "sbom:repository",
+          "value": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon"
+        },
+        {
+          "name": "sbom:ecosystem",
+          "value": "first-party"
+        },
+        {
+          "name": "sbom:relationship",
+          "value": "root component"
+        },
+        {
+          "name": "sbom:metadata-source",
+          "value": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon/sbom.config.json"
+        },
+        {
+          "name": "sbom:notes",
+          "value": "First-party repository component."
+        },
+        {
+          "name": "vcs:commit",
+          "value": "086c74feed0362c7b81dd638314a16f1b5afbe95"
+        },
+        {
+          "name": "sbom:source-state",
+          "value": "modified working tree"
+        }
+      ]
+    },
+    "properties": [
+      {
+        "name": "sbom:scope",
+        "value": "The addon, all application containers it deploys, its control-plane dependencies, and platform services directly required or integrated"
+      },
+      {
+        "name": "sbom:container-detail",
+        "value": "Container components are digest-pinned inventory references; 0 of 3 verified child SBOMs are bundled and connected through hashed CycloneDX BOM-Link references"
+      },
+      {
+        "name": "sbom:unresolved-policy",
+        "value": "Deployment-supplied versions and NOASSERTION licenses are retained for manual review; no version or license is guessed"
+      }
+    ]
+  },
+  "components": [
+    {
+      "type": "container",
+      "bom-ref": "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_adminfrontend@sha256:9b243dec58c316ef1d7497b089e8faab73591ec300b96908577a3f988054deae",
+      "name": "ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_adminfrontend",
+      "version": "sha256:9b243dec58c316ef1d7497b089e8faab73591ec300b96908577a3f988054deae",
+      "scope": "required",
+      "licenses": [
+        {
+          "license": {
+            "id": "LGPL-3.0-or-later"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "sbom:repository",
+          "value": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon"
+        },
+        {
+          "name": "sbom:ecosystem",
+          "value": "OCI container"
+        },
+        {
+          "name": "sbom:relationship",
+          "value": "deployed application container"
+        },
+        {
+          "name": "sbom:metadata-source",
+          "value": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon/vars/software_references.yml"
+        },
+        {
+          "name": "sbom:notes",
+          "value": "Admin frontend image deployed by the addon; its verified, digest-bound SBOM is maintained as a modular child BOM."
+        },
+        {
+          "name": "sbom:child-bom-status",
+          "value": "not bundled"
+        }
+      ]
+    },
+    {
+      "type": "container",
+      "bom-ref": "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_frontend@sha256:e387216a5a142503301e9c664184bd4d9155e56120bf258ef16f31a347b51c37",
+      "name": "ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_frontend",
+      "version": "sha256:e387216a5a142503301e9c664184bd4d9155e56120bf258ef16f31a347b51c37",
+      "scope": "required",
+      "licenses": [
+        {
+          "license": {
+            "id": "LGPL-3.0-or-later"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "sbom:repository",
+          "value": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon"
+        },
+        {
+          "name": "sbom:ecosystem",
+          "value": "OCI container"
+        },
+        {
+          "name": "sbom:relationship",
+          "value": "deployed application container"
+        },
+        {
+          "name": "sbom:metadata-source",
+          "value": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon/vars/software_references.yml"
+        },
+        {
+          "name": "sbom:notes",
+          "value": "Public frontend image deployed by the addon; its verified, digest-bound SBOM is maintained as a modular child BOM."
+        },
+        {
+          "name": "sbom:child-bom-status",
+          "value": "not bundled"
+        }
+      ]
+    },
+    {
+      "type": "container",
+      "bom-ref": "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_backend@sha256:7563a14428179e42d10e1fe5189e173565022dfb98424ed00b2adaf9ab17bbdc",
+      "name": "ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_backend",
+      "version": "sha256:7563a14428179e42d10e1fe5189e173565022dfb98424ed00b2adaf9ab17bbdc",
+      "scope": "required",
+      "licenses": [
+        {
+          "license": {
+            "id": "LGPL-3.0-or-later"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "sbom:repository",
+          "value": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon"
+        },
+        {
+          "name": "sbom:ecosystem",
+          "value": "OCI container"
+        },
+        {
+          "name": "sbom:relationship",
+          "value": "deployed application container"
+        },
+        {
+          "name": "sbom:metadata-source",
+          "value": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon/vars/software_references.yml"
+        },
+        {
+          "name": "sbom:notes",
+          "value": "Backend image used for database migration and application runtime; its verified, digest-bound SBOM is maintained as a modular child BOM."
+        },
+        {
+          "name": "sbom:child-bom-status",
+          "value": "not bundled"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "component:civitas-core@not-pinned",
+      "name": "Civitas Core",
+      "version": "not pinned",
+      "scope": "required",
+      "licenses": [
+        {
+          "license": {
+            "name": "NOASSERTION"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "sbom:repository",
+          "value": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon"
+        },
+        {
+          "name": "sbom:ecosystem",
+          "value": "deployment platform"
+        },
+        {
+          "name": "sbom:relationship",
+          "value": "required addon host platform"
+        },
+        {
+          "name": "sbom:metadata-source",
+          "value": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon/.copier-answers.yml and tasks.yml"
+        },
+        {
+          "name": "sbom:notes",
+          "value": "The addon consumes Civitas Core inventory, shared access tasks, and platform services; the host version is selected by the deployment."
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "pkg:pypi/ansible-core@not-pinned",
+      "name": "ansible-core",
+      "version": "not pinned",
+      "scope": "required",
+      "licenses": [
+        {
+          "license": {
+            "id": "GPL-3.0-or-later"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "sbom:repository",
+          "value": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon"
+        },
+        {
+          "name": "sbom:ecosystem",
+          "value": "PyPI"
+        },
+        {
+          "name": "sbom:relationship",
+          "value": "required deployment execution dependency"
+        },
+        {
+          "name": "sbom:metadata-source",
+          "value": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon/tasks.yml and tasks/digital-energy-twin.yml"
+        },
+        {
+          "name": "sbom:notes",
+          "value": "Executes the addon playbook; the version is supplied by the Civitas Core control environment."
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:ansible/kubernetes.core@not-pinned",
+      "name": "kubernetes.core",
+      "version": "not pinned",
+      "scope": "required",
+      "licenses": [
+        {
+          "license": {
+            "id": "GPL-3.0-or-later"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "sbom:repository",
+          "value": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon"
+        },
+        {
+          "name": "sbom:ecosystem",
+          "value": "Ansible Galaxy collection"
+        },
+        {
+          "name": "sbom:relationship",
+          "value": "required deployment execution dependency"
+        },
+        {
+          "name": "sbom:metadata-source",
+          "value": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon/tasks/digital-energy-twin.yml"
+        },
+        {
+          "name": "sbom:notes",
+          "value": "Provides the k8s and k8s_info modules used throughout the addon; the version is supplied by the Civitas Core control environment."
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/jmespath@not-pinned",
+      "name": "jmespath",
+      "version": "not pinned",
+      "scope": "required",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "sbom:repository",
+          "value": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon"
+        },
+        {
+          "name": "sbom:ecosystem",
+          "value": "PyPI"
+        },
+        {
+          "name": "sbom:relationship",
+          "value": "required deployment execution dependency"
+        },
+        {
+          "name": "sbom:metadata-source",
+          "value": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon/tasks/digital-energy-twin.yml"
+        },
+        {
+          "name": "sbom:notes",
+          "value": "Required by the Ansible json_query filter used to select Keycloak clients; the version is supplied by the control environment."
+        }
+      ]
+    },
+    {
+      "type": "operating-system",
+      "bom-ref": "component:kubernetes@not-pinned",
+      "name": "Kubernetes",
+      "version": "not pinned",
+      "scope": "required",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "sbom:repository",
+          "value": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon"
+        },
+        {
+          "name": "sbom:ecosystem",
+          "value": "cluster platform"
+        },
+        {
+          "name": "sbom:relationship",
+          "value": "required application runtime platform"
+        },
+        {
+          "name": "sbom:metadata-source",
+          "value": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon/tasks/digital-energy-twin.yml and templates/"
+        },
+        {
+          "name": "sbom:notes",
+          "value": "Runs the Deployments, Services, Secrets, ConfigMaps, and Ingress resources created by the addon; the cluster version is deployment-specific."
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "component:ingress-nginx@not-pinned",
+      "name": "ingress-nginx",
+      "version": "not pinned",
+      "scope": "required",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "sbom:repository",
+          "value": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon"
+        },
+        {
+          "name": "sbom:ecosystem",
+          "value": "Kubernetes controller"
+        },
+        {
+          "name": "sbom:relationship",
+          "value": "required ingress integration"
+        },
+        {
+          "name": "sbom:metadata-source",
+          "value": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon/tasks/digital-energy-twin.yml"
+        },
+        {
+          "name": "sbom:notes",
+          "value": "The addon creates Ingress resources with NGINX-specific annotations; the controller version is supplied by the platform."
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "component:cert-manager@not-pinned",
+      "name": "cert-manager",
+      "version": "not pinned",
+      "scope": "required",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "sbom:repository",
+          "value": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon"
+        },
+        {
+          "name": "sbom:ecosystem",
+          "value": "Kubernetes controller"
+        },
+        {
+          "name": "sbom:relationship",
+          "value": "required TLS certificate integration"
+        },
+        {
+          "name": "sbom:metadata-source",
+          "value": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon/tasks/digital-energy-twin.yml"
+        },
+        {
+          "name": "sbom:notes",
+          "value": "Issues certificates for the three TLS Ingress resources through the configured cluster issuer; the version is supplied by the platform."
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "component:apache-apisix@not-pinned",
+      "name": "Apache APISIX",
+      "version": "not pinned",
+      "scope": "required",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "sbom:repository",
+          "value": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon"
+        },
+        {
+          "name": "sbom:ecosystem",
+          "value": "gateway service"
+        },
+        {
+          "name": "sbom:relationship",
+          "value": "required application gateway and policy integration"
+        },
+        {
+          "name": "sbom:metadata-source",
+          "value": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon/tasks/digital-energy-twin.yml"
+        },
+        {
+          "name": "sbom:notes",
+          "value": "Routes frontend and backend traffic and enforces OIDC, role, CORS, rate-limit, and response-header policies; the version is supplied by Civitas Core."
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "component:keycloak@not-pinned",
+      "name": "Keycloak",
+      "version": "not pinned",
+      "scope": "required",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "sbom:repository",
+          "value": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon"
+        },
+        {
+          "name": "sbom:ecosystem",
+          "value": "identity service"
+        },
+        {
+          "name": "sbom:relationship",
+          "value": "required identity and access management integration"
+        },
+        {
+          "name": "sbom:metadata-source",
+          "value": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon/tasks/digital-energy-twin.yml"
+        },
+        {
+          "name": "sbom:notes",
+          "value": "Provides the OIDC client, roles, client secret, discovery metadata, and token introspection used by the application; the version is supplied by Civitas Core."
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "component:postgresql@not-pinned",
+      "name": "PostgreSQL",
+      "version": "not pinned",
+      "scope": "required",
+      "licenses": [
+        {
+          "license": {
+            "id": "PostgreSQL"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "sbom:repository",
+          "value": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon"
+        },
+        {
+          "name": "sbom:ecosystem",
+          "value": "database service"
+        },
+        {
+          "name": "sbom:relationship",
+          "value": "required backend data store"
+        },
+        {
+          "name": "sbom:metadata-source",
+          "value": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon/tasks/digital-energy-twin.yml"
+        },
+        {
+          "name": "sbom:notes",
+          "value": "Stores backend application data in either the platform central database or a separately managed database; the server version is deployment-specific."
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "component:postgres-operator@not-pinned",
+      "name": "Zalando Postgres Operator",
+      "version": "not pinned",
+      "scope": "optional",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "sbom:repository",
+          "value": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon"
+        },
+        {
+          "name": "sbom:ecosystem",
+          "value": "Kubernetes operator"
+        },
+        {
+          "name": "sbom:relationship",
+          "value": "default database provisioning integration"
+        },
+        {
+          "name": "sbom:metadata-source",
+          "value": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon/tasks/digital-energy-twin.yml"
+        },
+        {
+          "name": "sbom:notes",
+          "value": "Reconciles the acid.zalan.do/v1 postgresql resource used in the default central-database mode; not used when a managed database is configured."
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "pkg:generic/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon@unversioned",
+      "dependsOn": [
+        "component:apache-apisix@not-pinned",
+        "component:cert-manager@not-pinned",
+        "component:civitas-core@not-pinned",
+        "component:ingress-nginx@not-pinned",
+        "component:keycloak@not-pinned",
+        "component:kubernetes@not-pinned",
+        "component:postgres-operator@not-pinned",
+        "component:postgresql@not-pinned",
+        "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_adminfrontend@sha256:9b243dec58c316ef1d7497b089e8faab73591ec300b96908577a3f988054deae",
+        "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_backend@sha256:7563a14428179e42d10e1fe5189e173565022dfb98424ed00b2adaf9ab17bbdc",
+        "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_frontend@sha256:e387216a5a142503301e9c664184bd4d9155e56120bf258ef16f31a347b51c37",
+        "pkg:ansible/kubernetes.core@not-pinned",
+        "pkg:pypi/ansible-core@not-pinned",
+        "pkg:pypi/jmespath@not-pinned"
+      ]
+    },
+    {
+      "ref": "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_adminfrontend@sha256:9b243dec58c316ef1d7497b089e8faab73591ec300b96908577a3f988054deae",
+      "dependsOn": []
+    },
+    {
+      "ref": "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_frontend@sha256:e387216a5a142503301e9c664184bd4d9155e56120bf258ef16f31a347b51c37",
+      "dependsOn": []
+    },
+    {
+      "ref": "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_backend@sha256:7563a14428179e42d10e1fe5189e173565022dfb98424ed00b2adaf9ab17bbdc",
+      "dependsOn": []
+    },
+    {
+      "ref": "component:civitas-core@not-pinned",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/ansible-core@not-pinned",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:ansible/kubernetes.core@not-pinned",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/jmespath@not-pinned",
+      "dependsOn": []
+    },
+    {
+      "ref": "component:kubernetes@not-pinned",
+      "dependsOn": []
+    },
+    {
+      "ref": "component:ingress-nginx@not-pinned",
+      "dependsOn": []
+    },
+    {
+      "ref": "component:cert-manager@not-pinned",
+      "dependsOn": []
+    },
+    {
+      "ref": "component:apache-apisix@not-pinned",
+      "dependsOn": []
+    },
+    {
+      "ref": "component:keycloak@not-pinned",
+      "dependsOn": []
+    },
+    {
+      "ref": "component:postgresql@not-pinned",
+      "dependsOn": []
+    },
+    {
+      "ref": "component:postgres-operator@not-pinned",
+      "dependsOn": []
+    }
+  ]
+}

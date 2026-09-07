@@ -1,70 +1,201 @@
-name: Pin Image Digests
+name: Prepare application release
 
 on:
   workflow_dispatch:
     inputs:
-      tag:
-        description: 'Image tag to resolve and pin'
+      image_tag:
+        description: "Application image tag to resolve (for example dev or latest)"
         required: true
-        default: 'dev'
-        type: choice
-        options:
-          - dev
-          - latest
+        default: "dev"
+        type: string
+      release_tag:
+        description: "Addon release tag (leave empty to use the next minor version)"
+        required: false
+        type: string
 
 permissions:
   contents: write
+  packages: read
   pull-requests: write
 
 jobs:
-  pin-digests:
+  prepare-release:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve addon release tag
+        id: release
+        env:
+          REQUESTED_TAG: ${{ inputs.release_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          latest_version=$(git tag --list \
+            | sed -nE 's/^v?([0-9]+\.[0-9]+\.[0-9]+)$/\1/p' \
+            | sort -V \
+            | tail -n 1)
+
+          if [[ -z "${latest_version}" ]]; then
+            suggested_tag="v0.1.0"
+          else
+            IFS=. read -r major minor _patch <<< "${latest_version}"
+            suggested_tag="v${major}.$((minor + 1)).0"
+          fi
+
+          if [[ -n "${REQUESTED_TAG}" ]]; then
+            release_tag="${REQUESTED_TAG}"
+          else
+            release_tag="${suggested_tag}"
+          fi
+
+          if [[ ! "${release_tag}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "release_tag must be a semantic version such as v0.4.0" >&2
+            exit 1
+          fi
+
+          release_version="${release_tag#v}"
+          {
+            echo "tag=${release_tag}"
+            echo "version=${release_version}"
+            echo "suggested_tag=${suggested_tag}"
+          } >> "${GITHUB_OUTPUT}"
+
+          {
+            echo "### Release preparation"
+            echo
+            echo "- Selected addon tag: \`${release_tag}\`"
+            echo "- Suggested next minor tag: \`${suggested_tag}\`"
+            echo "- Application image tag: \`${{ inputs.image_tag }}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Validate application image tag
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "${IMAGE_TAG}" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+            echo "image_tag is not a valid OCI image tag" >&2
+            exit 1
+          fi
 
       - name: Set up crane
         uses: imjasonh/setup-crane@v0.4
 
-      - name: Authenticate crane to GHCR
-        run: crane auth login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
+      - name: Authenticate to GHCR
+        run: crane auth login ghcr.io -u "${{ github.actor }}" -p "${{ secrets.GITHUB_TOKEN }}"
 
-      - name: Resolve digests
+      - name: Resolve image digests
         id: digests
         env:
-          TAG: ${{ inputs.tag }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        shell: bash
         run: |
-          ADMIN_DIGEST=$(crane digest ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_adminfrontend:${TAG})
-          PUBLIC_DIGEST=$(crane digest ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_frontend:${TAG})
-          BACKEND_DIGEST=$(crane digest ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_backend:${TAG})
+          set -euo pipefail
+          admin=$(crane digest "ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_adminfrontend:${IMAGE_TAG}")
+          public=$(crane digest "ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_frontend:${IMAGE_TAG}")
+          backend=$(crane digest "ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_backend:${IMAGE_TAG}")
 
-          echo "admin=${ADMIN_DIGEST}" >> $GITHUB_OUTPUT
-          echo "public=${PUBLIC_DIGEST}" >> $GITHUB_OUTPUT
-          echo "backend=${BACKEND_DIGEST}" >> $GITHUB_OUTPUT
+          {
+            echo "admin=${admin}"
+            echo "public=${public}"
+            echo "backend=${backend}"
+          } >> "${GITHUB_OUTPUT}"
 
-      - name: Update software_references.yml
+      - name: Verify and bundle application SBOMs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ADMIN_DIGEST: ${{ steps.digests.outputs.admin }}
+          PUBLIC_DIGEST: ${{ steps.digests.outputs.public }}
+          BACKEND_DIGEST: ${{ steps.digests.outputs.backend }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p sboms
+
+          fetch_sbom() {
+            local image="$1"
+            local digest="$2"
+            local repository="$3"
+            local output="$4"
+
+            gh attestation verify "oci://${image}@${digest}" \
+              --repo "${repository}" \
+              --predicate-type https://cyclonedx.org/bom \
+              --format json \
+              --jq '.[0].verificationResult.statement.predicate' \
+              > "${output}"
+            python -m json.tool "${output}" > /dev/null
+          }
+
+          fetch_sbom \
+            ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_adminfrontend \
+            "${ADMIN_DIGEST}" \
+            csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_AdminFrontend \
+            sboms/admin.cdx.json
+          fetch_sbom \
+            ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_frontend \
+            "${PUBLIC_DIGEST}" \
+            csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_Frontend \
+            sboms/public.cdx.json
+          fetch_sbom \
+            ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_backend \
+            "${BACKEND_DIGEST}" \
+            csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_Backend \
+            sboms/backend.cdx.json
+
+      - name: Update release inputs
         env:
           ADMIN_DIGEST: ${{ steps.digests.outputs.admin }}
           PUBLIC_DIGEST: ${{ steps.digests.outputs.public }}
           BACKEND_DIGEST: ${{ steps.digests.outputs.backend }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        shell: bash
         run: |
+          set -euo pipefail
           yq -i '.software."digital-energy-twin".admin.digest = env(ADMIN_DIGEST)' vars/software_references.yml
           yq -i '.software."digital-energy-twin".public.digest = env(PUBLIC_DIGEST)' vars/software_references.yml
           yq -i '.software."digital-energy-twin".backend.digest = env(BACKEND_DIGEST)' vars/software_references.yml
 
-      - name: Create Pull Request
+          yq -o=json -i '
+            .releaseTag = strenv(RELEASE_TAG) |
+            .rootComponent.version = strenv(RELEASE_VERSION) |
+            .rootComponent."bom-ref" = "pkg:generic/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon@" + strenv(RELEASE_VERSION) |
+            .rootComponent.purl = "pkg:generic/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon@" + strenv(RELEASE_VERSION)
+          ' sbom.config.json
+
+      - name: Generate and validate addon SBOM
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m venv .sbom-env
+          .sbom-env/bin/python -m pip install --requirement requirements-sbom.txt
+          SBOM_REQUIRE_CHILD_BOMS=1 .sbom-env/bin/python scripts/generate_sbom.py
+
+      - name: Create review pull request
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          branch: pin-digests/${{ inputs.tag }}
-          title: "chore: pin ${{ inputs.tag }} image digests"
+          branch: prepare-release/${{ steps.release.outputs.tag }}
+          title: "chore: prepare addon release ${{ steps.release.outputs.tag }}"
           body: |
-            Pins all image tags to their current `${{ inputs.tag }}` digests.
+            Prepares the Digital Energy Twin addon release `${{ steps.release.outputs.tag }}`.
 
-            | Component | Reference |
-            |-----------|-----------|
-            | admin     | `${{ steps.digests.outputs.admin }}` |
-            | public    | `${{ steps.digests.outputs.public }}` |
-            | backend   | `${{ steps.digests.outputs.backend }}` |
-          commit-message: "chore: pin ${{ inputs.tag }} image digests"
+            The pull request is intentionally left open for manual review. Merging it does not create a Git tag or release.
+
+            | Component | Image tag | Digest | Modular SBOM |
+            |-----------|-----------|--------|--------------|
+            | admin | `${{ inputs.image_tag }}` | `${{ steps.digests.outputs.admin }}` | `sboms/admin.cdx.json` |
+            | public | `${{ inputs.image_tag }}` | `${{ steps.digests.outputs.public }}` | `sboms/public.cdx.json` |
+            | backend | `${{ inputs.image_tag }}` | `${{ steps.digests.outputs.backend }}` | `sboms/backend.cdx.json` |
+
+            Suggested next minor tag when this workflow started: `${{ steps.release.outputs.suggested_tag }}`.
+          commit-message: "chore: prepare addon release ${{ steps.release.outputs.tag }}"
+          draft: true
           delete-branch: true
