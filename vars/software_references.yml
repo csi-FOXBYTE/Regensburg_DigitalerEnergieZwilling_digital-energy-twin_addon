@@ -4,12 +4,12 @@ software:
     admin:
       registry: "ghcr.io"
       repository: "csi-foxbyte/regensburg_digitalerenergiezwilling_adminfrontend"
-      digest: "sha256:9b243dec58c316ef1d7497b089e8faab73591ec300b96908577a3f988054deae"
+      digest: "sha256:ef8196ec8bb673123607bbcf47fa0132ee190d58907b444c7afafe099a9616df"
     public:
       registry: "ghcr.io"
       repository: "csi-foxbyte/regensburg_digitalerenergiezwilling_frontend"
-      digest: "sha256:e387216a5a142503301e9c664184bd4d9155e56120bf258ef16f31a347b51c37"
+      digest: "sha256:9f78a1e58d00c9c20a8259d7534adb9e48adb93e5f32db2a54dc85f9aee0df45"
     backend:
       registry: "ghcr.io"
       repository: "csi-foxbyte/regensburg_digitalerenergiezwilling_backend"
-      digest: "sha256:7563a14428179e42d10e1fe5189e173565022dfb98424ed00b2adaf9ab17bbdc"
+      digest: "sha256:436a472ee0fac598bf156a401a38dfcd09a4c011e91369cdc95a0d831343c345"
