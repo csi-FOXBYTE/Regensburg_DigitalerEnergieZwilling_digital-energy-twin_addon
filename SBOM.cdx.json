@@ -5,7 +5,7 @@
   "serialNumber": "urn:uuid:4fe7fe89-31aa-5441-b387-91ec4b57bd20",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-09-07T12:55:50.859368Z",
+    "timestamp": "2026-09-10T07:43:20.335564Z",
     "tools": {
       "components": [
         {
@@ -52,11 +52,11 @@
         },
         {
           "name": "vcs:commit",
-          "value": "086c74feed0362c7b81dd638314a16f1b5afbe95"
+          "value": "246703b3d6815735608893d0a819fe8ad06d5200"
         },
         {
           "name": "sbom:source-state",
-          "value": "modified working tree"
+          "value": "clean"
         }
       ]
     },
@@ -78,9 +78,9 @@
   "components": [
     {
       "type": "container",
-      "bom-ref": "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_adminfrontend@sha256:9b243dec58c316ef1d7497b089e8faab73591ec300b96908577a3f988054deae",
+      "bom-ref": "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_adminfrontend@sha256:ef8196ec8bb673123607bbcf47fa0132ee190d58907b444c7afafe099a9616df",
       "name": "ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_adminfrontend",
-      "version": "sha256:9b243dec58c316ef1d7497b089e8faab73591ec300b96908577a3f988054deae",
+      "version": "sha256:ef8196ec8bb673123607bbcf47fa0132ee190d58907b444c7afafe099a9616df",
       "scope": "required",
       "licenses": [
         {
@@ -118,9 +118,9 @@
     },
     {
       "type": "container",
-      "bom-ref": "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_frontend@sha256:e387216a5a142503301e9c664184bd4d9155e56120bf258ef16f31a347b51c37",
+      "bom-ref": "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_frontend@sha256:9f78a1e58d00c9c20a8259d7534adb9e48adb93e5f32db2a54dc85f9aee0df45",
       "name": "ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_frontend",
-      "version": "sha256:e387216a5a142503301e9c664184bd4d9155e56120bf258ef16f31a347b51c37",
+      "version": "sha256:9f78a1e58d00c9c20a8259d7534adb9e48adb93e5f32db2a54dc85f9aee0df45",
       "scope": "required",
       "licenses": [
         {
@@ -158,9 +158,9 @@
     },
     {
       "type": "container",
-      "bom-ref": "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_backend@sha256:7563a14428179e42d10e1fe5189e173565022dfb98424ed00b2adaf9ab17bbdc",
+      "bom-ref": "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_backend@sha256:436a472ee0fac598bf156a401a38dfcd09a4c011e91369cdc95a0d831343c345",
       "name": "ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_backend",
-      "version": "sha256:7563a14428179e42d10e1fe5189e173565022dfb98424ed00b2adaf9ab17bbdc",
+      "version": "sha256:436a472ee0fac598bf156a401a38dfcd09a4c011e91369cdc95a0d831343c345",
       "scope": "required",
       "licenses": [
         {
@@ -605,24 +605,24 @@
         "component:kubernetes@not-pinned",
         "component:postgres-operator@not-pinned",
         "component:postgresql@not-pinned",
-        "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_adminfrontend@sha256:9b243dec58c316ef1d7497b089e8faab73591ec300b96908577a3f988054deae",
-        "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_backend@sha256:7563a14428179e42d10e1fe5189e173565022dfb98424ed00b2adaf9ab17bbdc",
-        "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_frontend@sha256:e387216a5a142503301e9c664184bd4d9155e56120bf258ef16f31a347b51c37",
+        "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_adminfrontend@sha256:ef8196ec8bb673123607bbcf47fa0132ee190d58907b444c7afafe099a9616df",
+        "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_backend@sha256:436a472ee0fac598bf156a401a38dfcd09a4c011e91369cdc95a0d831343c345",
+        "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_frontend@sha256:9f78a1e58d00c9c20a8259d7534adb9e48adb93e5f32db2a54dc85f9aee0df45",
         "pkg:ansible/kubernetes.core@not-pinned",
         "pkg:pypi/ansible-core@not-pinned",
         "pkg:pypi/jmespath@not-pinned"
       ]
     },
     {
-      "ref": "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_adminfrontend@sha256:9b243dec58c316ef1d7497b089e8faab73591ec300b96908577a3f988054deae",
+      "ref": "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_adminfrontend@sha256:ef8196ec8bb673123607bbcf47fa0132ee190d58907b444c7afafe099a9616df",
       "dependsOn": []
     },
     {
-      "ref": "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_frontend@sha256:e387216a5a142503301e9c664184bd4d9155e56120bf258ef16f31a347b51c37",
+      "ref": "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_frontend@sha256:9f78a1e58d00c9c20a8259d7534adb9e48adb93e5f32db2a54dc85f9aee0df45",
       "dependsOn": []
     },
     {
-      "ref": "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_backend@sha256:7563a14428179e42d10e1fe5189e173565022dfb98424ed00b2adaf9ab17bbdc",
+      "ref": "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_backend@sha256:436a472ee0fac598bf156a401a38dfcd09a4c011e91369cdc95a0d831343c345",
       "dependsOn": []
     },
     {
