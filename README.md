@@ -6,7 +6,8 @@ This addon deploys the Digital Energy Twin stack into Civitas Core:
 - Admin frontend container
 - Backend container
 
-Ingress traffic is routed via APISIX using dedicated hosts.
+Traefik routes incoming traffic to APISIX using dedicated hosts. APISIX applies
+authentication and API policies before forwarding requests to the applications.
 
 ## Installation
 
@@ -41,7 +42,9 @@ inv_addons:
 
 By default, the addon works without any `software` section in your deployment inventory.
 Container images are resolved from [vars/software_references.yml](vars/software_references.yml)
-as the single source of truth.
+as the single source of truth. Each image has a concrete version `tag` and is
+deployed as `registry/repository:tag`. The release workflow resolves moving tags
+such as `dev` or `latest` to the corresponding version for each application.
 
 ### Database
 
@@ -84,6 +87,21 @@ Namespace behavior:
 
 ## Routing and Security
 
+### Platform routing
+
+The addon creates three standard Kubernetes Ingress resources in the platform's
+APISIX namespace (`inv_access.apisix.ns_name`). They use `inv_k8s.ingress_class`
+and point directly to the `{{ inv_access.apisix.helm_release_name }}-gateway`
+service on port 80. The application Services stay in the addon namespace.
+
+Ingress resources are created using `inv_access.apisix.ns_kubeconfig`, which must
+allow writes in the APISIX namespace. cert-manager issues the host certificates
+there using `inv_k8s.cert_manager.issuer_name`.
+
+HTTP-to-HTTPS redirection is handled by the platform's Traefik configuration
+(`inv_k8s.ingress.http: false`). This addon uses the Ingress provider; Gateway API
+resources are not required.
+
 ### Hosts
 
 - `admin_host` -> admin frontend
@@ -117,8 +135,6 @@ The addon ensures client roles exist in Keycloak for the OIDC client:
 - `admin`
 - `manager`
 - `maintainer`
-
-The obsolete `viewer` client role is removed during deployment.
 
 Role checks in APISIX:
 
@@ -220,9 +236,9 @@ Then run:
 
 The checked-in [`SBOM.cdx.json`](SBOM.cdx.json) is a CycloneDX 1.6 inventory;
 [`SBOM.csv`](SBOM.csv) provides the same components in a review-friendly table.
-It covers the addon, all three digest-pinned application images, the software
-needed to execute its Ansible tasks, and the platform services the deployed app
-directly uses. The application inventories remain separate CycloneDX documents
+It covers the addon, all three application images referenced by version tag,
+the software needed to execute its Ansible tasks, and the platform services the
+deployed app directly uses. The application inventories remain separate CycloneDX documents
 under `sboms/`; the addon SBOM connects them to the corresponding containers
 with hashed BOM-Link references.
 
@@ -242,9 +258,12 @@ Set `SBOM_REQUIRE_CHILD_BOMS=1` to require all three verified child documents.
 The manually triggered **Prepare application release** workflow accepts an
 application image tag and an optional addon release tag. If the release tag is
 empty, it selects the next minor semantic version (or `v0.1.0` when no release
-tag exists). It resolves the image digests, verifies their signed CycloneDX
-attestations, bundles the child SBOMs, updates the addon version and references,
-and opens a draft pull request for review. It never merges the pull request or
+tag exists). It reads each image's `org.opencontainers.image.version` label and
+checks that the matching version tag resolves to the same digest as the requested
+tag. It writes those concrete version tags to `vars/software_references.yml`,
+verifies signed CycloneDX attestations using the resolved digests, bundles the
+child SBOMs, updates the addon version, and opens a draft pull request for review.
+It never merges the pull request or
 creates the Git tag. After merging, create the selected addon tag manually.
 
 The repository or organization must allow `GITHUB_TOKEN` to create pull

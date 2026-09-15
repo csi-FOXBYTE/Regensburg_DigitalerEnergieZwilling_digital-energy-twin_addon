@@ -65,9 +65,9 @@
     digital_energy_twin_admin_direct_host: "{{ digital_energy_twin.admin_host }}"
     digital_energy_twin_public_direct_host: "{{ digital_energy_twin.public_host }}"
     digital_energy_twin_backend_direct_host: "{{ digital_energy_twin.backend_host }}"
-    digital_energy_twin_admin_image: "{{ software['digital-energy-twin'].admin.registry ~ '/' ~ software['digital-energy-twin'].admin.repository ~ '@' ~ software['digital-energy-twin'].admin.digest }}"
-    digital_energy_twin_public_image: "{{ software['digital-energy-twin'].public.registry ~ '/' ~ software['digital-energy-twin'].public.repository ~ '@' ~ software['digital-energy-twin'].public.digest }}"
-    digital_energy_twin_backend_image: "{{ software['digital-energy-twin'].backend.registry ~ '/' ~ software['digital-energy-twin'].backend.repository ~ '@' ~ software['digital-energy-twin'].backend.digest }}"
+    digital_energy_twin_admin_image: "{{ software['digital-energy-twin'].admin.registry ~ '/' ~ software['digital-energy-twin'].admin.repository ~ ':' ~ software['digital-energy-twin'].admin.tag }}"
+    digital_energy_twin_public_image: "{{ software['digital-energy-twin'].public.registry ~ '/' ~ software['digital-energy-twin'].public.repository ~ ':' ~ software['digital-energy-twin'].public.tag }}"
+    digital_energy_twin_backend_image: "{{ software['digital-energy-twin'].backend.registry ~ '/' ~ software['digital-energy-twin'].backend.repository ~ ':' ~ software['digital-energy-twin'].backend.tag }}"
     digital_energy_twin_database_secret_name: "digital-energy-twin-database"
     digital_energy_twin_backend_port: "{{ digital_energy_twin.backend_port | default(5000) | int }}"
     digital_energy_twin_admin_port: "{{ digital_energy_twin.admin_port | default(8080) | int }}"
@@ -75,7 +75,8 @@
     digital_energy_twin_admin_required_role: "admin"
     digital_energy_twin_manager_required_role: "manager"
     digital_energy_twin_maintainer_required_role: "maintainer"
-    digital_energy_twin_apisix_data_plane_host: "{{ digital_energy_twin.apisix_data_plane_host | default(inv_access.apisix.helm_release_name ~ '-gateway.' ~ (inv_access.apisix.ns_name | lower) ~ '.svc.cluster.local') }}"
+    digital_energy_twin_apisix_namespace: "{{ inv_access.apisix.ns_name | lower }}"
+    digital_energy_twin_apisix_service_name: "{{ inv_access.apisix.helm_release_name }}-gateway"
     digital_energy_twin_tiles_url: "{{ digital_energy_twin.tiles_url }}"
     digital_energy_twin_terrain_url: "{{ digital_energy_twin.terrain_url }}"
     digital_energy_twin_address_database_url: "{{ digital_energy_twin.address_database_url }}"
@@ -324,31 +325,12 @@
     definition: "{{ lookup('template', addon_dir + 'templates/digital_energy_twin_backend_svc.yaml.j2') | from_yaml }}"
   when: digital_energy_twin_enabled
 
-- name: "Digital Energy Twin: Ensure APISIX data-plane service reference"
-  kubernetes.core.k8s:
-    state: present
-    kubeconfig: "{{ k8s_config }}"
-    context: "{{ k8s_context }}"
-    namespace: "{{ k8s_namespace }}"
-    definition:
-      apiVersion: v1
-      kind: Service
-      metadata:
-        name: apisix-data-plane
-      spec:
-        type: ExternalName
-        externalName: "{{ digital_energy_twin_apisix_data_plane_host }}"
-        ports:
-          - port: 80
-            targetPort: 80
-  when: digital_energy_twin_enabled
-
 - name: "Digital Energy Twin: Ensure ingress for admin direct host"
   kubernetes.core.k8s:
     state: present
-    kubeconfig: "{{ k8s_config }}"
+    kubeconfig: "{{ K8S_KUBECONFIG_PATH }}/{{ inv_access.apisix.ns_kubeconfig }}"
     context: "{{ k8s_context }}"
-    namespace: "{{ k8s_namespace }}"
+    namespace: "{{ digital_energy_twin_apisix_namespace }}"
     definition:
       apiVersion: networking.k8s.io/v1
       kind: Ingress
@@ -357,7 +339,6 @@
         annotations:
           cert-manager.io/cluster-issuer: "{{ inv_k8s.cert_manager.issuer_name }}"
           kubernetes.io/tls-acme: "true"
-          nginx.ingress.kubernetes.io/ssl-redirect: "{{ open_http_port|default('true')|lower }}"
       spec:
         ingressClassName: "{{ inv_k8s.ingress_class }}"
         tls:
@@ -372,7 +353,7 @@
                   pathType: Prefix
                   backend:
                     service:
-                      name: apisix-data-plane
+                      name: "{{ digital_energy_twin_apisix_service_name }}"
                       port:
                         number: 80
   when: digital_energy_twin_enabled
@@ -380,9 +361,9 @@
 - name: "Digital Energy Twin: Ensure ingress for public direct host"
   kubernetes.core.k8s:
     state: present
-    kubeconfig: "{{ k8s_config }}"
+    kubeconfig: "{{ K8S_KUBECONFIG_PATH }}/{{ inv_access.apisix.ns_kubeconfig }}"
     context: "{{ k8s_context }}"
-    namespace: "{{ k8s_namespace }}"
+    namespace: "{{ digital_energy_twin_apisix_namespace }}"
     definition:
       apiVersion: networking.k8s.io/v1
       kind: Ingress
@@ -391,7 +372,6 @@
         annotations:
           cert-manager.io/cluster-issuer: "{{ inv_k8s.cert_manager.issuer_name }}"
           kubernetes.io/tls-acme: "true"
-          nginx.ingress.kubernetes.io/ssl-redirect: "{{ open_http_port|default('true')|lower }}"
       spec:
         ingressClassName: "{{ inv_k8s.ingress_class }}"
         tls:
@@ -406,7 +386,7 @@
                   pathType: Prefix
                   backend:
                     service:
-                      name: apisix-data-plane
+                      name: "{{ digital_energy_twin_apisix_service_name }}"
                       port:
                         number: 80
   when: digital_energy_twin_enabled
@@ -414,9 +394,9 @@
 - name: "Digital Energy Twin: Ensure ingress for backend direct host"
   kubernetes.core.k8s:
     state: present
-    kubeconfig: "{{ k8s_config }}"
+    kubeconfig: "{{ K8S_KUBECONFIG_PATH }}/{{ inv_access.apisix.ns_kubeconfig }}"
     context: "{{ k8s_context }}"
-    namespace: "{{ k8s_namespace }}"
+    namespace: "{{ digital_energy_twin_apisix_namespace }}"
     definition:
       apiVersion: networking.k8s.io/v1
       kind: Ingress
@@ -425,7 +405,6 @@
         annotations:
           cert-manager.io/cluster-issuer: "{{ inv_k8s.cert_manager.issuer_name }}"
           kubernetes.io/tls-acme: "true"
-          nginx.ingress.kubernetes.io/ssl-redirect: "{{ open_http_port|default('true')|lower }}"
       spec:
         ingressClassName: "{{ inv_k8s.ingress_class }}"
         tls:
@@ -440,7 +419,7 @@
                   pathType: Prefix
                   backend:
                     service:
-                      name: apisix-data-plane
+                      name: "{{ digital_energy_twin_apisix_service_name }}"
                       port:
                         number: 80
   when: digital_energy_twin_enabled
@@ -577,19 +556,6 @@
     status_code:
       - 201
       - 409
-  when: digital_energy_twin_enabled
-
-- name: "Digital Energy Twin: Delete legacy OIDC client role viewer"
-  uri:
-    method: DELETE
-    url: "{{ inv_access.platform.hostname }}/admin/realms/{{ inv_access.tenant.realm_name }}/clients/{{ digital_energy_twin_client_internal_id }}/roles/viewer"
-    ca_path: "{{ inv_k8s.ingress.ca_path }}"
-    headers:
-      Accept: application/json
-      Authorization: "Bearer {{ keycloak_login.json.access_token }}"
-    status_code:
-      - 204
-      - 404
   when: digital_energy_twin_enabled
 
 - name: "Digital Energy Twin: Ensure OIDC client role manager (Verwalter)"

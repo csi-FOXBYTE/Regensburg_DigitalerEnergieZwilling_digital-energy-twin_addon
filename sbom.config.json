@@ -105,15 +105,15 @@
     },
     {
       "type": "application",
-      "bom-ref": "component:ingress-nginx@not-pinned",
-      "name": "ingress-nginx",
+      "bom-ref": "component:traefik@not-pinned",
+      "name": "Traefik",
       "version": "not pinned",
       "scope": "required",
       "ecosystem": "Kubernetes controller",
       "relationship": "required ingress integration",
       "metadataSource": "tasks/digital-energy-twin.yml",
-      "notes": "The addon creates Ingress resources with NGINX-specific annotations; the controller version is supplied by the platform.",
-      "license": "Apache-2.0"
+      "notes": "The platform ingress controller routes the three addon hosts directly to the APISIX gateway service using standard Ingress resources in the APISIX namespace; the controller version is supplied by the platform.",
+      "license": "MIT"
     },
     {
       "type": "application",

@@ -69,7 +69,7 @@ def read_image_references() -> dict[str, dict[str, str]]:
     images: dict[str, dict[str, str]] = {}
     current: str | None = None
     section_pattern = re.compile(r"^    ([a-z][a-z0-9_-]*):\s*$")
-    value_pattern = re.compile(r'^      (registry|repository|digest):\s*"([^"\\]+)"\s*$')
+    value_pattern = re.compile(r'^      (registry|repository|tag):\s*"([^"\\]+)"\s*$')
 
     for line in SOFTWARE_REFERENCES_PATH.read_text(encoding="utf-8").splitlines():
         section_match = section_pattern.match(line)
@@ -82,7 +82,7 @@ def read_image_references() -> dict[str, dict[str, str]]:
             images[current][value_match.group(1)] = value_match.group(2)
 
     for key, values in images.items():
-        for field in ("registry", "repository", "digest"):
+        for field in ("registry", "repository", "tag"):
             require_string(values.get(field), f"software reference {key}.{field}")
     return images
 
@@ -201,12 +201,12 @@ def create_bom(config: dict[str, Any]) -> dict[str, Any]:
         configured_keys.add(source_key)
         reference = image_references[source_key]
         name = f"{reference['registry']}/{reference['repository']}"
-        digest = reference["digest"]
+        tag = reference["tag"]
         component = {
             "type": "container",
-            "bom-ref": f"oci:{name}@{digest}",
+            "bom-ref": f"oci:{name}:{tag}",
             "name": name,
-            "version": digest,
+            "version": tag,
             "scope": "required",
             "licenses": [{"license": {"id": require_string(entry.get("license"), f"{location}.license")}}],
         }
@@ -336,7 +336,7 @@ def create_bom(config: dict[str, Any]) -> dict[str, Any]:
                 {
                     "name": "sbom:container-detail",
                     "value": (
-                        f"Container components are digest-pinned inventory references; "
+                        f"Container components are version-tagged inventory references; "
                         f"{child_bom_count} of {len(image_config)} verified child SBOMs are "
                         "bundled and connected through hashed CycloneDX BOM-Link references"
                     ),

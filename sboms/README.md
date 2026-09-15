@@ -1,7 +1,8 @@
 # Modular application SBOMs
 
-The release-preparation workflow verifies the CycloneDX SBOM attestation for
-each digest-pinned application image and writes the verified predicates here:
+The release-preparation workflow resolves each application's version tag,
+verifies its CycloneDX SBOM attestation by image digest, and writes the verified
+predicates here:
 
 - `admin.cdx.json`
 - `public.cdx.json`

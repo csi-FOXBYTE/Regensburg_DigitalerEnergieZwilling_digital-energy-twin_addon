@@ -30,4 +30,3 @@ all:
             #   db_name: "digital_energy_twin"
             #   port: "5432"
             #   user_k8s_secret: "digital-energy-twin.credentials"
-            # apisix_data_plane_host: "apisix-data-plane.{{ ENVIRONMENT }}-access-stack.svc.cluster.local"

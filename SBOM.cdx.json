@@ -5,7 +5,7 @@
   "serialNumber": "urn:uuid:4fe7fe89-31aa-5441-b387-91ec4b57bd20",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-09-10T07:43:20.335564Z",
+    "timestamp": "2026-09-15T07:12:28.249524Z",
     "tools": {
       "components": [
         {
@@ -52,11 +52,11 @@
         },
         {
           "name": "vcs:commit",
-          "value": "246703b3d6815735608893d0a819fe8ad06d5200"
+          "value": "36f24d3fdf112ef5fb6f8f343a29046ca7e77760"
         },
         {
           "name": "sbom:source-state",
-          "value": "clean"
+          "value": "modified working tree"
         }
       ]
     },
@@ -67,7 +67,7 @@
       },
       {
         "name": "sbom:container-detail",
-        "value": "Container components are digest-pinned inventory references; 0 of 3 verified child SBOMs are bundled and connected through hashed CycloneDX BOM-Link references"
+        "value": "Container components are version-tagged inventory references; 0 of 3 verified child SBOMs are bundled and connected through hashed CycloneDX BOM-Link references"
       },
       {
         "name": "sbom:unresolved-policy",
@@ -78,9 +78,9 @@
   "components": [
     {
       "type": "container",
-      "bom-ref": "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_adminfrontend@sha256:ef8196ec8bb673123607bbcf47fa0132ee190d58907b444c7afafe099a9616df",
+      "bom-ref": "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_adminfrontend:0.10.0-dev.0",
       "name": "ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_adminfrontend",
-      "version": "sha256:ef8196ec8bb673123607bbcf47fa0132ee190d58907b444c7afafe099a9616df",
+      "version": "0.10.0-dev.0",
       "scope": "required",
       "licenses": [
         {
@@ -118,9 +118,9 @@
     },
     {
       "type": "container",
-      "bom-ref": "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_frontend@sha256:9f78a1e58d00c9c20a8259d7534adb9e48adb93e5f32db2a54dc85f9aee0df45",
+      "bom-ref": "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_frontend:0.17.0-dev.0",
       "name": "ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_frontend",
-      "version": "sha256:9f78a1e58d00c9c20a8259d7534adb9e48adb93e5f32db2a54dc85f9aee0df45",
+      "version": "0.17.0-dev.0",
       "scope": "required",
       "licenses": [
         {
@@ -158,9 +158,9 @@
     },
     {
       "type": "container",
-      "bom-ref": "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_backend@sha256:436a472ee0fac598bf156a401a38dfcd09a4c011e91369cdc95a0d831343c345",
+      "bom-ref": "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_backend:0.7.3-dev.0",
       "name": "ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_backend",
-      "version": "sha256:436a472ee0fac598bf156a401a38dfcd09a4c011e91369cdc95a0d831343c345",
+      "version": "0.7.3-dev.0",
       "scope": "required",
       "licenses": [
         {
@@ -378,14 +378,14 @@
     },
     {
       "type": "application",
-      "bom-ref": "component:ingress-nginx@not-pinned",
-      "name": "ingress-nginx",
+      "bom-ref": "component:traefik@not-pinned",
+      "name": "Traefik",
       "version": "not pinned",
       "scope": "required",
       "licenses": [
         {
           "license": {
-            "id": "Apache-2.0"
+            "id": "MIT"
           }
         }
       ],
@@ -408,7 +408,7 @@
         },
         {
           "name": "sbom:notes",
-          "value": "The addon creates Ingress resources with NGINX-specific annotations; the controller version is supplied by the platform."
+          "value": "The platform ingress controller routes the three addon hosts directly to the APISIX gateway service using standard Ingress resources in the APISIX namespace; the controller version is supplied by the platform."
         }
       ]
     },
@@ -600,29 +600,29 @@
         "component:apache-apisix@not-pinned",
         "component:cert-manager@not-pinned",
         "component:civitas-core@not-pinned",
-        "component:ingress-nginx@not-pinned",
         "component:keycloak@not-pinned",
         "component:kubernetes@not-pinned",
         "component:postgres-operator@not-pinned",
         "component:postgresql@not-pinned",
-        "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_adminfrontend@sha256:ef8196ec8bb673123607bbcf47fa0132ee190d58907b444c7afafe099a9616df",
-        "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_backend@sha256:436a472ee0fac598bf156a401a38dfcd09a4c011e91369cdc95a0d831343c345",
-        "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_frontend@sha256:9f78a1e58d00c9c20a8259d7534adb9e48adb93e5f32db2a54dc85f9aee0df45",
+        "component:traefik@not-pinned",
+        "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_adminfrontend:0.10.0-dev.0",
+        "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_backend:0.7.3-dev.0",
+        "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_frontend:0.17.0-dev.0",
         "pkg:ansible/kubernetes.core@not-pinned",
         "pkg:pypi/ansible-core@not-pinned",
         "pkg:pypi/jmespath@not-pinned"
       ]
     },
     {
-      "ref": "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_adminfrontend@sha256:ef8196ec8bb673123607bbcf47fa0132ee190d58907b444c7afafe099a9616df",
+      "ref": "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_adminfrontend:0.10.0-dev.0",
       "dependsOn": []
     },
     {
-      "ref": "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_frontend@sha256:9f78a1e58d00c9c20a8259d7534adb9e48adb93e5f32db2a54dc85f9aee0df45",
+      "ref": "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_frontend:0.17.0-dev.0",
       "dependsOn": []
     },
     {
-      "ref": "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_backend@sha256:436a472ee0fac598bf156a401a38dfcd09a4c011e91369cdc95a0d831343c345",
+      "ref": "oci:ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_backend:0.7.3-dev.0",
       "dependsOn": []
     },
     {
@@ -646,7 +646,7 @@
       "dependsOn": []
     },
     {
-      "ref": "component:ingress-nginx@not-pinned",
+      "ref": "component:traefik@not-pinned",
       "dependsOn": []
     },
     {

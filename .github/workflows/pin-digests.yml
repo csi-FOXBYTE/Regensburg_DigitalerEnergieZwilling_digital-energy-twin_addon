@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: "Application image tag to resolve (for example dev or latest)"
+        description: "Application image tag to resolve to concrete versions (for example dev or latest)"
         required: true
         default: "dev"
         type: string
@@ -90,29 +90,48 @@ jobs:
       - name: Authenticate to GHCR
         run: crane auth login ghcr.io -u "${{ github.actor }}" -p "${{ secrets.GITHUB_TOKEN }}"
 
-      - name: Resolve image digests
-        id: digests
+      - name: Resolve application version tags
+        id: images
         env:
           IMAGE_TAG: ${{ inputs.image_tag }}
         shell: bash
         run: |
           set -euo pipefail
-          admin=$(crane digest "ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_adminfrontend:${IMAGE_TAG}")
-          public=$(crane digest "ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_frontend:${IMAGE_TAG}")
-          backend=$(crane digest "ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_backend:${IMAGE_TAG}")
+          resolve_version() {
+            local component="$1"
+            local image="$2"
+            local digest version version_digest
 
-          {
-            echo "admin=${admin}"
-            echo "public=${public}"
-            echo "backend=${backend}"
-          } >> "${GITHUB_OUTPUT}"
+            digest=$(crane digest "${image}:${IMAGE_TAG}")
+            version=$(crane config "${image}@${digest}" \
+              | python -c 'import json, sys; print(json.load(sys.stdin)["config"]["Labels"]["org.opencontainers.image.version"])')
+            if [[ ! "${version}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]] || (( ${#version} > 128 )); then
+              echo "${image}:${IMAGE_TAG} has no valid concrete version label" >&2
+              exit 1
+            fi
+
+            version_digest=$(crane digest "${image}:${version}")
+            if [[ "${version_digest}" != "${digest}" ]]; then
+              echo "${image}:${version} does not match the image selected by ${IMAGE_TAG}" >&2
+              exit 1
+            fi
+
+            {
+              echo "${component}_tag=${version}"
+              echo "${component}_digest=${digest}"
+            } >> "${GITHUB_OUTPUT}"
+          }
+
+          resolve_version admin ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_adminfrontend
+          resolve_version public ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_frontend
+          resolve_version backend ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_backend
 
       - name: Verify and bundle application SBOMs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ADMIN_DIGEST: ${{ steps.digests.outputs.admin }}
-          PUBLIC_DIGEST: ${{ steps.digests.outputs.public }}
-          BACKEND_DIGEST: ${{ steps.digests.outputs.backend }}
+          ADMIN_DIGEST: ${{ steps.images.outputs.admin_digest }}
+          PUBLIC_DIGEST: ${{ steps.images.outputs.public_digest }}
+          BACKEND_DIGEST: ${{ steps.images.outputs.backend_digest }}
         shell: bash
         run: |
           set -euo pipefail
@@ -151,17 +170,17 @@ jobs:
 
       - name: Update release inputs
         env:
-          ADMIN_DIGEST: ${{ steps.digests.outputs.admin }}
-          PUBLIC_DIGEST: ${{ steps.digests.outputs.public }}
-          BACKEND_DIGEST: ${{ steps.digests.outputs.backend }}
+          ADMIN_TAG: ${{ steps.images.outputs.admin_tag }}
+          PUBLIC_TAG: ${{ steps.images.outputs.public_tag }}
+          BACKEND_TAG: ${{ steps.images.outputs.backend_tag }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
         shell: bash
         run: |
           set -euo pipefail
-          yq -i '.software."digital-energy-twin".admin.digest = env(ADMIN_DIGEST)' vars/software_references.yml
-          yq -i '.software."digital-energy-twin".public.digest = env(PUBLIC_DIGEST)' vars/software_references.yml
-          yq -i '.software."digital-energy-twin".backend.digest = env(BACKEND_DIGEST)' vars/software_references.yml
+          yq -i '.software."digital-energy-twin".admin.tag = strenv(ADMIN_TAG)' vars/software_references.yml
+          yq -i '.software."digital-energy-twin".public.tag = strenv(PUBLIC_TAG)' vars/software_references.yml
+          yq -i '.software."digital-energy-twin".backend.tag = strenv(BACKEND_TAG)' vars/software_references.yml
 
           yq -o=json -i '
             .releaseTag = strenv(RELEASE_TAG) |
@@ -191,9 +210,9 @@ jobs:
 
             | Component | Image tag | Digest | Modular SBOM |
             |-----------|-----------|--------|--------------|
-            | admin | `${{ inputs.image_tag }}` | `${{ steps.digests.outputs.admin }}` | `sboms/admin.cdx.json` |
-            | public | `${{ inputs.image_tag }}` | `${{ steps.digests.outputs.public }}` | `sboms/public.cdx.json` |
-            | backend | `${{ inputs.image_tag }}` | `${{ steps.digests.outputs.backend }}` | `sboms/backend.cdx.json` |
+            | admin | `${{ steps.images.outputs.admin_tag }}` | `${{ steps.images.outputs.admin_digest }}` | `sboms/admin.cdx.json` |
+            | public | `${{ steps.images.outputs.public_tag }}` | `${{ steps.images.outputs.public_digest }}` | `sboms/public.cdx.json` |
+            | backend | `${{ steps.images.outputs.backend_tag }}` | `${{ steps.images.outputs.backend_digest }}` | `sboms/backend.cdx.json` |
 
             Suggested next minor tag when this workflow started: `${{ steps.release.outputs.suggested_tag }}`.
           commit-message: "chore: prepare addon release ${{ steps.release.outputs.tag }}"
