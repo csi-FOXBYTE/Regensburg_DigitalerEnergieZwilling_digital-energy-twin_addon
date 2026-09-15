@@ -8,8 +8,8 @@ software:
     public:
       registry: "ghcr.io"
       repository: "csi-foxbyte/regensburg_digitalerenergiezwilling_frontend"
-      tag: "0.17.0-dev.0"
+      tag: "0.17.1-dev.0"
     backend:
       registry: "ghcr.io"
       repository: "csi-foxbyte/regensburg_digitalerenergiezwilling_backend"
-      tag: "0.7.3-dev.0"
+      tag: "0.7.3-dev.1"
