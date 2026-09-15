@@ -325,6 +325,24 @@
     definition: "{{ lookup('template', addon_dir + 'templates/digital_energy_twin_backend_svc.yaml.j2') | from_yaml }}"
   when: digital_energy_twin_enabled
 
+# Temporary migration task for the dev server's old addon-namespace routes.
+- name: "Digital Energy Twin: Remove legacy ingresses from addon namespace"
+  kubernetes.core.k8s:
+    state: absent
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    api_version: networking.k8s.io/v1
+    kind: Ingress
+    namespace: "{{ digital_energy_twin_namespace }}"
+    name: "{{ item }}"
+  loop:
+    - digital-energy-twin-admin-host
+    - digital-energy-twin-public-host
+    - digital-energy-twin-backend-host
+  when:
+    - digital_energy_twin_enabled
+    - (digital_energy_twin_namespace | lower) != digital_energy_twin_apisix_namespace
+
 - name: "Digital Energy Twin: Ensure ingress for admin direct host"
   kubernetes.core.k8s:
     state: present
