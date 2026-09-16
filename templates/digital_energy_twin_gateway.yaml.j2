@@ -1,0 +1,66 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: "{{ digital_energy_twin_gateway_host.name }}"
+  namespace: "{{ digital_energy_twin_apisix_namespace }}"
+  annotations:
+    cert-manager.io/cluster-issuer: "{{ inv_k8s.cert_manager.issuer_name }}"
+spec:
+  gatewayClassName: "{{ inv_k8s.gateway_class }}"
+  listeners:
+    - name: web
+      port: 80
+      protocol: HTTP
+      hostname: "{{ digital_energy_twin_gateway_host.hostname }}"
+    - name: websecure
+      port: 443
+      protocol: HTTPS
+      hostname: "{{ digital_energy_twin_gateway_host.hostname }}"
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: "{{ digital_energy_twin_gateway_host.hostname }}-tls"
+---
+{% if not (inv_k8s.ingress.http | default(false) | bool) %}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: "{{ digital_energy_twin_gateway_host.name }}-redirect"
+  namespace: "{{ digital_energy_twin_apisix_namespace }}"
+spec:
+  parentRefs:
+    - name: "{{ digital_energy_twin_gateway_host.name }}"
+      sectionName: web
+  hostnames:
+    - "{{ digital_energy_twin_gateway_host.hostname }}"
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+---
+{% endif %}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: "{{ digital_energy_twin_gateway_host.name }}"
+  namespace: "{{ digital_energy_twin_apisix_namespace }}"
+spec:
+  parentRefs:
+{% if inv_k8s.ingress.http | default(false) | bool %}
+    - name: "{{ digital_energy_twin_gateway_host.name }}"
+      sectionName: web
+{% endif %}
+    - name: "{{ digital_energy_twin_gateway_host.name }}"
+      sectionName: websecure
+  hostnames:
+    - "{{ digital_energy_twin_gateway_host.hostname }}"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: "{{ digital_energy_twin_apisix_service_name }}"
+          port: 80

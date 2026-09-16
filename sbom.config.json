@@ -100,7 +100,7 @@
       "ecosystem": "cluster platform",
       "relationship": "required application runtime platform",
       "metadataSource": "tasks/digital-energy-twin.yml and templates/",
-      "notes": "Runs the Deployments, Services, Secrets, ConfigMaps, and Ingress resources created by the addon; the cluster version is deployment-specific.",
+      "notes": "Runs the Deployments, Services, Secrets, ConfigMaps, Gateways, and HTTPRoutes created by the addon; the cluster version is deployment-specific.",
       "license": "Apache-2.0"
     },
     {
@@ -110,9 +110,9 @@
       "version": "not pinned",
       "scope": "required",
       "ecosystem": "Kubernetes controller",
-      "relationship": "required ingress integration",
+      "relationship": "reference platform Gateway API controller",
       "metadataSource": "tasks/digital-energy-twin.yml",
-      "notes": "The platform ingress controller routes the three addon hosts directly to the APISIX gateway service using standard Ingress resources in the APISIX namespace; the controller version is supplied by the platform.",
+      "notes": "Civitas Core uses Traefik as its reference Gateway API controller. The addon selects the platform controller via inv_k8s.gateway_class and routes its three hosts to the APISIX gateway service using Gateways and HTTPRoutes in the APISIX namespace; the controller version is supplied by the platform.",
       "license": "MIT"
     },
     {
@@ -124,7 +124,7 @@
       "ecosystem": "Kubernetes controller",
       "relationship": "required TLS certificate integration",
       "metadataSource": "tasks/digital-energy-twin.yml",
-      "notes": "Issues certificates for the three TLS Ingress resources through the configured cluster issuer; the version is supplied by the platform.",
+      "notes": "Issues certificates for the three annotated Gateways through the configured cluster issuer. Gateway API support must be enabled; the version is supplied by the platform.",
       "license": "Apache-2.0"
     },
     {

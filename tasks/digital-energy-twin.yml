@@ -24,6 +24,15 @@
       admin_host, public_host, backend_host, backend_cors_additional_origins,
       tiles_url, terrain_url, address_database_url.
 
+- name: "Digital Energy Twin: Validate Gateway API config"
+  ansible.builtin.assert:
+    that:
+      - inv_k8s.gateway_class is defined
+      - inv_k8s.gateway_class | length > 0
+    fail_msg: >-
+      The addon requires Gateway API routing, following Civitas Core.
+      Set inv_k8s.gateway_class to the platform's GatewayClass name.
+
 - name: "Digital Energy Twin: Validate database config type"
   ansible.builtin.assert:
     that:
@@ -153,6 +162,16 @@
     digital_energy_twin_public_service_name: "{{ digital_energy_twin_public_direct_host | replace('.', '-') }}"
     digital_energy_twin_backend_service_name: "{{ digital_energy_twin_backend_direct_host | replace('.', '-') }}"
 
+- name: "Digital Energy Twin: Set Gateway hosts"
+  ansible.builtin.set_fact:
+    digital_energy_twin_gateway_hosts:
+      - name: digital-energy-twin-admin-host
+        hostname: "{{ digital_energy_twin_admin_direct_host }}"
+      - name: digital-energy-twin-public-host
+        hostname: "{{ digital_energy_twin_public_direct_host }}"
+      - name: digital-energy-twin-backend-host
+        hostname: "{{ digital_energy_twin_backend_direct_host }}"
+
 - name: "Digital Energy Twin: Resolve upstreams"
   set_fact:
     digital_energy_twin_admin_upstream_host: "{{ digital_energy_twin_admin_service_name }}.{{ digital_energy_twin_namespace }}.svc.cluster.local"
@@ -167,6 +186,33 @@
     k8s_config: "{{ K8S_KUBECONFIG_PATH }}/{{ digital_energy_twin.ns_kubeconfig }}"
     k8s_context: "{{ inv_k8s.config.context }}"
     k8s_namespace: "{{ digital_energy_twin_namespace }}"
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Discover Gateway API resources"
+  kubernetes.core.k8s_info:
+    api_version: gateway.networking.k8s.io/v1
+    kind: "{{ item }}"
+    name: digital-energy-twin-admin-host
+    namespace: "{{ digital_energy_twin_apisix_namespace }}"
+    kubeconfig: "{{ K8S_KUBECONFIG_PATH }}/{{ inv_access.apisix.ns_kubeconfig }}"
+    context: "{{ k8s_context }}"
+  loop:
+    - Gateway
+    - HTTPRoute
+  register: digital_energy_twin_gateway_api
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Validate Gateway API availability"
+  ansible.builtin.assert:
+    that:
+      - item.api_found | default(false)
+    fail_msg: >-
+      Gateway API v1 {{ item.item }} is unavailable. The platform must install
+      Gateway API and run a controller for '{{ inv_k8s.gateway_class }}'.
+      The addon does not use Kubernetes Ingress resources.
+  loop: "{{ digital_energy_twin_gateway_api.results }}"
+  loop_control:
+    label: "{{ item.item }}"
   when: digital_energy_twin_enabled
 
 - name: "Digital Energy Twin: Ensure namespace exists (if ns_create=true)"
@@ -394,104 +440,34 @@
     definition: "{{ lookup('template', addon_dir + 'templates/digital_energy_twin_backend_svc.yaml.j2') | from_yaml }}"
   when: digital_energy_twin_enabled
 
-- name: "Digital Energy Twin: Ensure ingress for admin direct host"
+- name: "Digital Energy Twin: Ensure Gateway API routing for addon hosts"
   kubernetes.core.k8s:
     state: present
     kubeconfig: "{{ K8S_KUBECONFIG_PATH }}/{{ inv_access.apisix.ns_kubeconfig }}"
     context: "{{ k8s_context }}"
     namespace: "{{ digital_energy_twin_apisix_namespace }}"
-    definition:
-      apiVersion: networking.k8s.io/v1
-      kind: Ingress
-      metadata:
-        name: digital-energy-twin-admin-host
-        annotations:
-          cert-manager.io/cluster-issuer: "{{ inv_k8s.cert_manager.issuer_name }}"
-          kubernetes.io/tls-acme: "true"
-      spec:
-        ingressClassName: "{{ inv_k8s.ingress_class }}"
-        tls:
-          - hosts:
-              - "{{ digital_energy_twin_admin_direct_host }}"
-            secretName: "{{ digital_energy_twin_admin_direct_host }}-tls"
-        rules:
-          - host: "{{ digital_energy_twin_admin_direct_host }}"
-            http:
-              paths:
-                - path: /
-                  pathType: Prefix
-                  backend:
-                    service:
-                      name: "{{ digital_energy_twin_apisix_service_name }}"
-                      port:
-                        number: 80
+    definition: "{{ lookup('template', addon_dir + 'templates/digital_energy_twin_gateway.yaml.j2') | from_yaml_all | list }}"
+  loop: "{{ digital_energy_twin_gateway_hosts }}"
+  loop_control:
+    loop_var: digital_energy_twin_gateway_host
+    label: "{{ digital_energy_twin_gateway_host.hostname }}"
   when: digital_energy_twin_enabled
 
-- name: "Digital Energy Twin: Ensure ingress for public direct host"
+- name: "Digital Energy Twin: Remove Gateway redirects when HTTP is enabled"
   kubernetes.core.k8s:
-    state: present
+    state: absent
+    api_version: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    name: "{{ item.name }}-redirect"
     kubeconfig: "{{ K8S_KUBECONFIG_PATH }}/{{ inv_access.apisix.ns_kubeconfig }}"
     context: "{{ k8s_context }}"
     namespace: "{{ digital_energy_twin_apisix_namespace }}"
-    definition:
-      apiVersion: networking.k8s.io/v1
-      kind: Ingress
-      metadata:
-        name: digital-energy-twin-public-host
-        annotations:
-          cert-manager.io/cluster-issuer: "{{ inv_k8s.cert_manager.issuer_name }}"
-          kubernetes.io/tls-acme: "true"
-      spec:
-        ingressClassName: "{{ inv_k8s.ingress_class }}"
-        tls:
-          - hosts:
-              - "{{ digital_energy_twin_public_direct_host }}"
-            secretName: "{{ digital_energy_twin_public_direct_host }}-tls"
-        rules:
-          - host: "{{ digital_energy_twin_public_direct_host }}"
-            http:
-              paths:
-                - path: /
-                  pathType: Prefix
-                  backend:
-                    service:
-                      name: "{{ digital_energy_twin_apisix_service_name }}"
-                      port:
-                        number: 80
-  when: digital_energy_twin_enabled
-
-- name: "Digital Energy Twin: Ensure ingress for backend direct host"
-  kubernetes.core.k8s:
-    state: present
-    kubeconfig: "{{ K8S_KUBECONFIG_PATH }}/{{ inv_access.apisix.ns_kubeconfig }}"
-    context: "{{ k8s_context }}"
-    namespace: "{{ digital_energy_twin_apisix_namespace }}"
-    definition:
-      apiVersion: networking.k8s.io/v1
-      kind: Ingress
-      metadata:
-        name: digital-energy-twin-backend-host
-        annotations:
-          cert-manager.io/cluster-issuer: "{{ inv_k8s.cert_manager.issuer_name }}"
-          kubernetes.io/tls-acme: "true"
-      spec:
-        ingressClassName: "{{ inv_k8s.ingress_class }}"
-        tls:
-          - hosts:
-              - "{{ digital_energy_twin_backend_direct_host }}"
-            secretName: "{{ digital_energy_twin_backend_direct_host }}-tls"
-        rules:
-          - host: "{{ digital_energy_twin_backend_direct_host }}"
-            http:
-              paths:
-                - path: /
-                  pathType: Prefix
-                  backend:
-                    service:
-                      name: "{{ digital_energy_twin_apisix_service_name }}"
-                      port:
-                        number: 80
-  when: digital_energy_twin_enabled
+  loop: "{{ digital_energy_twin_gateway_hosts }}"
+  loop_control:
+    label: "{{ item.hostname }}"
+  when:
+    - digital_energy_twin_enabled
+    - inv_k8s.ingress.http | default(false) | bool
 
 - name: "Digital Energy Twin: Get IDM settings and api-access secret"
   include_tasks:

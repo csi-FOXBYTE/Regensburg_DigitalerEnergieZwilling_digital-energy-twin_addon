@@ -5,7 +5,7 @@
   "serialNumber": "urn:uuid:fbdae1cd-a27a-5978-9dff-09fda46f5dd7",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-09-16T11:29:58.863255Z",
+    "timestamp": "2026-09-16T11:48:32.458083Z",
     "tools": {
       "components": [
         {
@@ -52,7 +52,7 @@
         },
         {
           "name": "vcs:commit",
-          "value": "c572605addbd56a9dffd643ba5b51c3253a537d9"
+          "value": "27528b046c2e1d73eead728210dd7a52c6d857b9"
         },
         {
           "name": "sbom:source-state",
@@ -492,7 +492,7 @@
         },
         {
           "name": "sbom:notes",
-          "value": "Runs the Deployments, Services, Secrets, ConfigMaps, and Ingress resources created by the addon; the cluster version is deployment-specific."
+          "value": "Runs the Deployments, Services, Secrets, ConfigMaps, Gateways, and HTTPRoutes created by the addon; the cluster version is deployment-specific."
         }
       ]
     },
@@ -520,7 +520,7 @@
         },
         {
           "name": "sbom:relationship",
-          "value": "required ingress integration"
+          "value": "reference platform Gateway API controller"
         },
         {
           "name": "sbom:metadata-source",
@@ -528,7 +528,7 @@
         },
         {
           "name": "sbom:notes",
-          "value": "The platform ingress controller routes the three addon hosts directly to the APISIX gateway service using standard Ingress resources in the APISIX namespace; the controller version is supplied by the platform."
+          "value": "Civitas Core uses Traefik as its reference Gateway API controller. The addon selects the platform controller via inv_k8s.gateway_class and routes its three hosts to the APISIX gateway service using Gateways and HTTPRoutes in the APISIX namespace; the controller version is supplied by the platform."
         }
       ]
     },
@@ -564,7 +564,7 @@
         },
         {
           "name": "sbom:notes",
-          "value": "Issues certificates for the three TLS Ingress resources through the configured cluster issuer; the version is supplied by the platform."
+          "value": "Issues certificates for the three annotated Gateways through the configured cluster issuer. Gateway API support must be enabled; the version is supplied by the platform."
         }
       ]
     },
