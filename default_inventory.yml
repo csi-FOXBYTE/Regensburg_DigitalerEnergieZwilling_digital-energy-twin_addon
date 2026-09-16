@@ -14,7 +14,9 @@ all:
             ns_name: "{{ ENVIRONMENT }}-digitalenergytwin"
             ns_kubeconfig: "{{ kubeconfig_file | default('kubeconfig') }}"
             oidc_client_id: "digital-energy-twin"
-            # Hosts use the platform's Gateway API controller via inv_k8s.gateway_class.
+            # gateway: use inv_k8s.gateway_class; ingress: use inv_k8s.ingress_class.
+            # Select ingress for an existing ingress-nginx deployment without Gateway API.
+            routing_mode: gateway
             # Routes and TLS certificates are created in inv_access.apisix.ns_name.
             admin_host: "admin.det.{{ DOMAIN }}"
             public_host: "det.{{ DOMAIN }}"

@@ -6,8 +6,8 @@ This addon deploys the Digital Energy Twin stack into Civitas Core:
 - Admin frontend container
 - Backend container
 
-The platform's Gateway API controller routes incoming traffic to APISIX using
-dedicated hosts. APISIX applies authentication and API policies before forwarding
+The platform's selected Ingress or Gateway API controller routes incoming traffic
+to APISIX using dedicated hosts. APISIX applies authentication and API policies before forwarding
 requests to the applications.
 
 ## Installation
@@ -153,45 +153,79 @@ Namespace behavior:
 
 ### Platform routing
 
-The addon follows Civitas Core's `apisix-gateway-dataplane.yaml` pattern. It
-creates one `gateway.networking.k8s.io/v1` `Gateway` per addon hostname, with
-`HTTPRoute` resources pointing to the
-`{{ inv_access.apisix.helm_release_name }}-gateway` Service on port 80. All these
-resources live in the platform's APISIX namespace (`inv_access.apisix.ns_name`).
-APISIX then forwards requests to the application Services in the addon namespace.
+Select the entry routing with `inv_addons.digital-energy-twin.routing_mode`.
+Both modes send the three addon hostnames to the
+`{{ inv_access.apisix.helm_release_name }}-gateway` Service on port 80 in the
+APISIX namespace (`inv_access.apisix.ns_name`). APISIX applies the same
+routing and authentication rules in both modes, then forwards requests to the
+application Services in the addon namespace.
 
-Gateways use `inv_k8s.gateway_class`, which must identify a GatewayClass served
-by the platform's running Gateway API controller (Traefik in the reference
-configuration). Gateway API v1 support is checked before the addon creates
-resources. This checks API availability, not controller health or live routing.
-The addon creates no Kubernetes `Ingress` resources and does not depend on
-`inv_access.apisix.ingress_controller.enable`.
+| `routing_mode` | Resources created | Platform setting |
+| --- | --- | --- |
+| `gateway` (default) | `Gateway` and `HTTPRoute` per hostname | `inv_k8s.gateway_class` |
+| `ingress` | Kubernetes `Ingress` per hostname | `inv_k8s.ingress_class` |
+
+For a platform that requires Gateway API:
+
+```yaml
+inv_addons:
+  digital-energy-twin:
+    routing_mode: gateway
+```
+
+For an existing dev platform using ingress-nginx:
+
+```yaml
+inv_k8s:
+  ingress_class: nginx  # Must match the existing platform IngressClass.
+
+inv_addons:
+  digital-energy-twin:
+    routing_mode: ingress
+```
+
+These are partial inventory examples to merge into the existing configuration.
+The addon does not install controllers or change how the platform exposes
+APISIX, Keycloak, or other services. It does not depend on
+`inv_access.apisix.ingress_controller.enable`. The existing `admin_host`,
+`public_host`, and `backend_host` values work in either mode; their DNS must
+reach the selected controller's entry point.
+
+**Gateway mode** follows Civitas Core's `apisix-gateway-dataplane.yaml` pattern.
+It requires Gateway API v1 and a running controller for `inv_k8s.gateway_class`
+(Traefik in the reference configuration). The addon checks API availability,
+not controller health or live routing, before creating resources. In this mode,
+the addon does not read, create, or delete Kubernetes Ingress objects.
+
+cert-manager must have
+[Gateway API support enabled](https://cert-manager.io/docs/usage/gateway/).
+Gateway annotations select `inv_k8s.cert_manager.issuer_name` for issuing
+certificates into `<hostname>-tls` Secrets in the APISIX namespace.
+`inv_k8s.ingress.http: false` (the default when unset) creates HTTP-to-HTTPS
+redirect routes. When it is `true`, both HTTP and HTTPS forward to APISIX,
+and obsolete Gateway redirect routes are removed.
+
+**Ingress mode** requires an existing controller for `inv_k8s.ingress_class`.
+It creates three standard `networking.k8s.io/v1` Ingress resources in the
+APISIX namespace, with TLS certificates requested through the same cluster
+issuer. It does not require `inv_k8s.gateway_class`, Gateway API definitions,
+or a Gateway controller, and performs no Gateway API discovery or resource
+operations. For ingress-nginx, the `ssl-redirect` annotation follows
+`inv_k8s.ingress.http`; other Ingress controllers use their platform redirect
+configuration.
 
 The kubeconfig in `inv_access.apisix.ns_kubeconfig` must allow reading, creating,
-and updating Gateways and HTTPRoutes in the APISIX namespace, plus deleting
-HTTPRoutes when removing an obsolete redirect. cert-manager must have
-[Gateway API support enabled](https://cert-manager.io/docs/usage/gateway/).
-The Gateway annotations select `inv_k8s.cert_manager.issuer_name` for issuing
-the host certificates into `<hostname>-tls` Secrets in the same namespace.
+and updating the selected route resource types in the APISIX namespace.
+Gateway mode also needs permission to delete obsolete redirect HTTPRoutes.
+The inventory keys `inv_k8s.ingress.http` and `inv_k8s.ingress.ca_path` retain
+the platform's naming; they control HTTP behavior and CA trust.
 
-As in Civitas Core, `inv_k8s.ingress.http: false` (the default when unset)
-creates HTTP-to-HTTPS redirect routes. When it is `true`, both HTTP and HTTPS
-forward to APISIX, and obsolete redirect routes are removed. The inventory keys
-`inv_k8s.ingress.http` and `inv_k8s.ingress.ca_path` retain the platform's naming;
-they control HTTP behavior and CA trust and do not enable Kubernetes Ingress.
-
-The existing `admin_host`, `public_host`, and `backend_host` addon inventory
-requires no changes. DNS for those hosts must reach the platform's Gateway
-entry point. The platform must also expose its Keycloak and APISIX Admin API
-endpoints, which the addon uses during deployment; their Gateway resources
-remain the platform's responsibility.
-
-Upgrading does not automatically prune previously deployed Ingress objects.
-After verifying the Gateway routes, the platform operator can remove the old
-`digital-energy-twin-admin-host`, `digital-energy-twin-public-host`, and
-`digital-energy-twin-backend-host` Ingress objects from the APISIX namespace
-(or the addon namespace for older deployments). This addon no longer reads,
-creates, or deletes Ingress objects.
+Changing modes does not automatically remove resources from the previous mode.
+After verifying the new routes, the platform operator should remove obsolete
+Ingress or Gateway/HTTPRoute resources named `digital-energy-twin-admin-host`,
+`digital-energy-twin-public-host`, and `digital-energy-twin-backend-host`, plus
+Gateway HTTPRoutes with the `-redirect` suffix where applicable. Routes live in
+the APISIX namespace; older addon versions also used the addon namespace.
 
 ### Hosts
 

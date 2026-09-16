@@ -100,7 +100,7 @@
       "ecosystem": "cluster platform",
       "relationship": "required application runtime platform",
       "metadataSource": "tasks/digital-energy-twin.yml and templates/",
-      "notes": "Runs the Deployments, Services, Secrets, ConfigMaps, Gateways, and HTTPRoutes created by the addon; the cluster version is deployment-specific.",
+      "notes": "Runs the Deployments, Services, Secrets, ConfigMaps, and selected Ingress or Gateway/HTTPRoute resources created by the addon; the cluster version is deployment-specific.",
       "license": "Apache-2.0"
     },
     {
@@ -108,12 +108,24 @@
       "bom-ref": "component:traefik@not-pinned",
       "name": "Traefik",
       "version": "not pinned",
-      "scope": "required",
+      "scope": "optional",
       "ecosystem": "Kubernetes controller",
       "relationship": "reference platform Gateway API controller",
       "metadataSource": "tasks/digital-energy-twin.yml",
-      "notes": "Civitas Core uses Traefik as its reference Gateway API controller. The addon selects the platform controller via inv_k8s.gateway_class and routes its three hosts to the APISIX gateway service using Gateways and HTTPRoutes in the APISIX namespace; the controller version is supplied by the platform.",
+      "notes": "Civitas Core uses Traefik as its reference Gateway API controller. Gateway routing mode selects the platform controller via inv_k8s.gateway_class and routes the addon hosts to APISIX using Gateways and HTTPRoutes; Ingress mode can use the existing platform Ingress controller instead. The controller version is supplied by the platform.",
       "license": "MIT"
+    },
+    {
+      "type": "application",
+      "bom-ref": "component:ingress-nginx@not-pinned",
+      "name": "ingress-nginx",
+      "version": "not pinned",
+      "scope": "optional",
+      "ecosystem": "Kubernetes controller",
+      "relationship": "supported existing platform Ingress controller",
+      "metadataSource": "templates/digital_energy_twin_ingress.yaml.j2",
+      "notes": "An existing ingress-nginx deployment can route the three addon hosts to APISIX in Ingress routing mode. The addon selects the IngressClass via inv_k8s.ingress_class and does not install the controller; the controller version is supplied by the platform.",
+      "license": "Apache-2.0"
     },
     {
       "type": "application",
@@ -124,7 +136,7 @@
       "ecosystem": "Kubernetes controller",
       "relationship": "required TLS certificate integration",
       "metadataSource": "tasks/digital-energy-twin.yml",
-      "notes": "Issues certificates for the three annotated Gateways through the configured cluster issuer. Gateway API support must be enabled; the version is supplied by the platform.",
+      "notes": "Issues certificates for the selected annotated Ingress or Gateway resources through the configured cluster issuer. Gateway API support is required only in Gateway routing mode; the version is supplied by the platform.",
       "license": "Apache-2.0"
     },
     {

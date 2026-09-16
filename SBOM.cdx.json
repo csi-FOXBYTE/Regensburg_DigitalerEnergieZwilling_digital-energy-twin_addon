@@ -5,7 +5,7 @@
   "serialNumber": "urn:uuid:fbdae1cd-a27a-5978-9dff-09fda46f5dd7",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-09-16T11:48:32.458083Z",
+    "timestamp": "2026-09-16T12:37:38.380591Z",
     "tools": {
       "components": [
         {
@@ -52,7 +52,7 @@
         },
         {
           "name": "vcs:commit",
-          "value": "27528b046c2e1d73eead728210dd7a52c6d857b9"
+          "value": "ec81d10a1b90fb6fc3408d18a490cf7469587a45"
         },
         {
           "name": "sbom:source-state",
@@ -492,7 +492,7 @@
         },
         {
           "name": "sbom:notes",
-          "value": "Runs the Deployments, Services, Secrets, ConfigMaps, Gateways, and HTTPRoutes created by the addon; the cluster version is deployment-specific."
+          "value": "Runs the Deployments, Services, Secrets, ConfigMaps, and selected Ingress or Gateway/HTTPRoute resources created by the addon; the cluster version is deployment-specific."
         }
       ]
     },
@@ -501,7 +501,7 @@
       "bom-ref": "component:traefik@not-pinned",
       "name": "Traefik",
       "version": "not pinned",
-      "scope": "required",
+      "scope": "optional",
       "licenses": [
         {
           "license": {
@@ -528,7 +528,43 @@
         },
         {
           "name": "sbom:notes",
-          "value": "Civitas Core uses Traefik as its reference Gateway API controller. The addon selects the platform controller via inv_k8s.gateway_class and routes its three hosts to the APISIX gateway service using Gateways and HTTPRoutes in the APISIX namespace; the controller version is supplied by the platform."
+          "value": "Civitas Core uses Traefik as its reference Gateway API controller. Gateway routing mode selects the platform controller via inv_k8s.gateway_class and routes the addon hosts to APISIX using Gateways and HTTPRoutes; Ingress mode can use the existing platform Ingress controller instead. The controller version is supplied by the platform."
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "component:ingress-nginx@not-pinned",
+      "name": "ingress-nginx",
+      "version": "not pinned",
+      "scope": "optional",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "sbom:repository",
+          "value": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon"
+        },
+        {
+          "name": "sbom:ecosystem",
+          "value": "Kubernetes controller"
+        },
+        {
+          "name": "sbom:relationship",
+          "value": "supported existing platform Ingress controller"
+        },
+        {
+          "name": "sbom:metadata-source",
+          "value": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon/templates/digital_energy_twin_ingress.yaml.j2"
+        },
+        {
+          "name": "sbom:notes",
+          "value": "An existing ingress-nginx deployment can route the three addon hosts to APISIX in Ingress routing mode. The addon selects the IngressClass via inv_k8s.ingress_class and does not install the controller; the controller version is supplied by the platform."
         }
       ]
     },
@@ -564,7 +600,7 @@
         },
         {
           "name": "sbom:notes",
-          "value": "Issues certificates for the three annotated Gateways through the configured cluster issuer. Gateway API support must be enabled; the version is supplied by the platform."
+          "value": "Issues certificates for the selected annotated Ingress or Gateway resources through the configured cluster issuer. Gateway API support is required only in Gateway routing mode; the version is supplied by the platform."
         }
       ]
     },
@@ -720,6 +756,7 @@
         "component:apache-apisix@not-pinned",
         "component:cert-manager@not-pinned",
         "component:civitas-core@not-pinned",
+        "component:ingress-nginx@not-pinned",
         "component:keycloak@not-pinned",
         "component:kubernetes@not-pinned",
         "component:postgres-operator@not-pinned",
@@ -773,6 +810,10 @@
     },
     {
       "ref": "component:traefik@not-pinned",
+      "dependsOn": []
+    },
+    {
+      "ref": "component:ingress-nginx@not-pinned",
       "dependsOn": []
     },
     {
