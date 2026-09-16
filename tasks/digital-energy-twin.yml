@@ -24,23 +24,64 @@
       admin_host, public_host, backend_host, backend_cors_additional_origins,
       tiles_url, terrain_url, address_database_url.
 
-- name: "Digital Energy Twin: Validate managed database config"
+- name: "Digital Energy Twin: Validate database config type"
   ansible.builtin.assert:
     that:
       - digital_energy_twin.db is mapping
+    fail_msg: "inv_addons['digital-energy-twin'].db must be a mapping."
+  when: digital_energy_twin.db is defined
+
+- name: "Digital Energy Twin: Select database mode"
+  ansible.builtin.set_fact:
+    digital_energy_twin_db_mode: "{{ digital_energy_twin.db.mode | default('existing') if digital_energy_twin.db is defined else 'central' }}"
+
+- name: "Digital Energy Twin: Validate database mode"
+  ansible.builtin.assert:
+    that:
+      - digital_energy_twin_db_mode in ['existing', 'zalando']
+    fail_msg: >-
+      db.mode must be existing or zalando. Omit db entirely to use central-db.
+  when: digital_energy_twin.db is defined
+
+- name: "Digital Energy Twin: Validate explicit database config"
+  ansible.builtin.assert:
+    that:
       - digital_energy_twin.db.ns_name is defined
       - digital_energy_twin.db.ns_name | length > 0
       - digital_energy_twin.db.db_address is defined
       - digital_energy_twin.db.db_address | length > 0
       - digital_energy_twin.db.db_name is defined
       - digital_energy_twin.db.db_name | length > 0
+    fail_msg: >-
+      Expected db.ns_name, db.db_address, and db.db_name.
+      db.port is optional and defaults to 5432.
+  when: digital_energy_twin.db is defined
+
+- name: "Digital Energy Twin: Validate existing database config"
+  ansible.builtin.assert:
+    that:
       - digital_energy_twin.db.user_k8s_secret is defined
       - digital_energy_twin.db.user_k8s_secret | length > 0
     fail_msg: >-
-      inv_addons['digital-energy-twin'].db selects a managed database.
-      Expected: ns_name, db_address, db_name, and user_k8s_secret.
-      port is optional and defaults to 5432.
-  when: digital_energy_twin.db is defined
+      Existing database mode requires db.user_k8s_secret.
+      The database, user, and credentials Secret must already exist.
+  when: digital_energy_twin_db_mode == 'existing'
+
+- name: "Digital Energy Twin: Validate Zalando database config"
+  ansible.builtin.assert:
+    that:
+      - digital_energy_twin.db.cluster_name is defined
+      - digital_energy_twin.db.cluster_name | length > 0
+      - digital_energy_twin.db.db_name is match('^[a-z][a-z0-9_]*$')
+      - digital_energy_twin.db.db_name | length <= 51
+      - digital_energy_twin.db.user_k8s_secret is not defined or digital_energy_twin.db.user_k8s_secret | length > 0
+    fail_msg: >-
+      Zalando mode requires db.cluster_name identifying an existing postgresql
+      resource in db.ns_name. Use a database name starting with a lowercase letter,
+      containing only lowercase letters, underscores, and digits, with at most
+      51 characters (to leave room for generated role names).
+      Optional db.user_k8s_secret must be non-empty if supplied.
+  when: digital_energy_twin_db_mode == 'zalando'
 
 - name: "Digital Energy Twin: Validate central database config"
   ansible.builtin.assert:
@@ -52,8 +93,8 @@
       - inv_central_db.ns_name | length > 0
     fail_msg: >-
       The default database mode requires the platform central-db to be enabled.
-      Define inv_addons['digital-energy-twin'].db to use a managed database instead.
-  when: digital_energy_twin.db is not defined
+      Define inv_addons['digital-energy-twin'].db to use another database server.
+  when: digital_energy_twin_db_mode == 'central'
 
 - name: "Digital Energy Twin: Set defaults"
   set_fact:
@@ -158,44 +199,72 @@
       Create the namespace manually or set inv_addons['digital-energy-twin'].ns_create to true.
   when: digital_energy_twin_enabled and not digital_energy_twin_ns_create
 
-- name: "Digital Energy Twin: Ensure database and owner user exist on central DB"
+- name: "Digital Energy Twin: Select central database"
+  ansible.builtin.set_fact:
+    digital_energy_twin_db_cluster_name: central-db
+    digital_energy_twin_db_host: "central-db.{{ inv_central_db.ns_name }}.svc.cluster.local"
+    digital_energy_twin_db_port: "{{ inv_central_db.port | default('5432') }}"
+    digital_energy_twin_db_name: "digital_energy_twin"
+    digital_energy_twin_db_secret_namespace: "{{ inv_central_db.ns_name }}"
+    digital_energy_twin_db_secret_name: "digital-energy-twin-owner-user.central-db.credentials.postgresql.acid.zalan.do"
+  when: digital_energy_twin_enabled and digital_energy_twin_db_mode == 'central'
+
+- name: "Digital Energy Twin: Select explicit database connection"
+  ansible.builtin.set_fact:
+    digital_energy_twin_db_host: "{{ digital_energy_twin.db.db_address }}"
+    digital_energy_twin_db_port: "{{ digital_energy_twin.db.port | default('5432') }}"
+    digital_energy_twin_db_name: "{{ digital_energy_twin.db.db_name }}"
+    digital_energy_twin_db_secret_namespace: "{{ digital_energy_twin.db.ns_name }}"
+  when: digital_energy_twin_enabled and digital_energy_twin_db_mode in ['existing', 'zalando']
+
+- name: "Digital Energy Twin: Select existing database credentials"
+  ansible.builtin.set_fact:
+    digital_energy_twin_db_secret_name: "{{ digital_energy_twin.db.user_k8s_secret }}"
+  when: digital_energy_twin_enabled and digital_energy_twin_db_mode == 'existing'
+
+- name: "Digital Energy Twin: Select Zalando cluster and owner credentials"
+  ansible.builtin.set_fact:
+    digital_energy_twin_db_cluster_name: "{{ digital_energy_twin.db.cluster_name }}"
+    digital_energy_twin_db_secret_name: "{{ digital_energy_twin.db.user_k8s_secret | default((digital_energy_twin_db_name | replace('_', '-')) ~ '-owner-user.' ~ digital_energy_twin.db.cluster_name ~ '.credentials.postgresql.acid.zalan.do') }}"
+  when: digital_energy_twin_enabled and digital_energy_twin_db_mode == 'zalando'
+
+- name: "Digital Energy Twin: Get target Zalando cluster"
+  kubernetes.core.k8s_info:
+    api_version: acid.zalan.do/v1
+    kind: postgresql
+    namespace: "{{ digital_energy_twin_db_secret_namespace }}"
+    name: "{{ digital_energy_twin_db_cluster_name }}"
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+  register: digital_energy_twin_db_cluster
+  when: digital_energy_twin_enabled and digital_energy_twin_db_mode in ['central', 'zalando']
+
+- name: "Digital Energy Twin: Validate target Zalando cluster exists"
+  ansible.builtin.assert:
+    that:
+      - digital_energy_twin_db_cluster.resources | length == 1
+    fail_msg: >-
+      Zalando PostgreSQL cluster '{{ digital_energy_twin_db_cluster_name }}' must
+      already exist in namespace '{{ digital_energy_twin_db_secret_namespace }}'.
+      The addon provisions a database within this cluster, not a PostgreSQL server.
+  when: digital_energy_twin_enabled and digital_energy_twin_db_mode in ['central', 'zalando']
+
+- name: "Digital Energy Twin: Ensure database and owner user exist on target Zalando cluster"
   kubernetes.core.k8s:
-    state: present
-    namespace: "{{ inv_central_db.ns_name }}"
+    state: patched
+    merge_type: merge
+    namespace: "{{ digital_energy_twin_db_secret_namespace }}"
     kubeconfig: "{{ k8s_config }}"
     context: "{{ k8s_context }}"
     definition:
       apiVersion: acid.zalan.do/v1
       kind: postgresql
       metadata:
-        name: central-db
-        namespace: "{{ inv_central_db.ns_name }}"
+        name: "{{ digital_energy_twin_db_cluster_name }}"
+        namespace: "{{ digital_energy_twin_db_secret_namespace }}"
       spec:
-        preparedDatabases:
-          digital_energy_twin:
-            defaultUsers: true
-            schemas:
-              public:
-                defaultRoles: false
-  when: digital_energy_twin_enabled and digital_energy_twin.db is not defined
-
-- name: "Digital Energy Twin: Select central database"
-  ansible.builtin.set_fact:
-    digital_energy_twin_db_host: "central-db.{{ inv_central_db.ns_name }}.svc.cluster.local"
-    digital_energy_twin_db_port: "{{ inv_central_db.port | default('5432') }}"
-    digital_energy_twin_db_name: "digital_energy_twin"
-    digital_energy_twin_db_secret_namespace: "{{ inv_central_db.ns_name }}"
-    digital_energy_twin_db_secret_name: "digital-energy-twin-owner-user.central-db.credentials.postgresql.acid.zalan.do"
-  when: digital_energy_twin_enabled and digital_energy_twin.db is not defined
-
-- name: "Digital Energy Twin: Select managed database"
-  ansible.builtin.set_fact:
-    digital_energy_twin_db_host: "{{ digital_energy_twin.db.db_address }}"
-    digital_energy_twin_db_port: "{{ digital_energy_twin.db.port | default('5432') }}"
-    digital_energy_twin_db_name: "{{ digital_energy_twin.db.db_name }}"
-    digital_energy_twin_db_secret_namespace: "{{ digital_energy_twin.db.ns_name }}"
-    digital_energy_twin_db_secret_name: "{{ digital_energy_twin.db.user_k8s_secret }}"
-  when: digital_energy_twin_enabled and digital_energy_twin.db is defined
+        preparedDatabases: "{{ {digital_energy_twin_db_name: {'defaultUsers': true, 'schemas': {'public': {'defaultRoles': false}}}} }}"
+  when: digital_energy_twin_enabled and digital_energy_twin_db_mode in ['central', 'zalando']
 
 - name: "Digital Energy Twin: Get database application credentials secret"
   kubernetes.core.k8s_info:

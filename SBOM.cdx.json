@@ -5,7 +5,7 @@
   "serialNumber": "urn:uuid:fbdae1cd-a27a-5978-9dff-09fda46f5dd7",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-09-15T07:54:54.724468Z",
+    "timestamp": "2026-09-16T11:29:58.863255Z",
     "tools": {
       "components": [
         {
@@ -52,7 +52,7 @@
         },
         {
           "name": "vcs:commit",
-          "value": "0059f25be84c8c2d1b5116bf46f253e616c7aae3"
+          "value": "c572605addbd56a9dffd643ba5b51c3253a537d9"
         },
         {
           "name": "sbom:source-state",
@@ -672,7 +672,7 @@
         },
         {
           "name": "sbom:notes",
-          "value": "Stores backend application data in either the platform central database or a separately managed database; the server version is deployment-specific."
+          "value": "Stores backend application data in a database provisioned on central-db or another existing Zalando cluster, or in a separately managed existing database; the server version is deployment-specific."
         }
       ]
     },
@@ -708,7 +708,7 @@
         },
         {
           "name": "sbom:notes",
-          "value": "Reconciles the acid.zalan.do/v1 postgresql resource used in the default central-database mode; not used when a managed database is configured."
+          "value": "Reconciles the acid.zalan.do/v1 postgresql resource used to provision the addon database on central-db or another existing Zalando cluster; not used in existing-database mode."
         }
       ]
     }

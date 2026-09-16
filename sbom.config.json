@@ -160,7 +160,7 @@
       "ecosystem": "database service",
       "relationship": "required backend data store",
       "metadataSource": "tasks/digital-energy-twin.yml",
-      "notes": "Stores backend application data in either the platform central database or a separately managed database; the server version is deployment-specific.",
+      "notes": "Stores backend application data in a database provisioned on central-db or another existing Zalando cluster, or in a separately managed existing database; the server version is deployment-specific.",
       "license": "PostgreSQL"
     },
     {
@@ -172,7 +172,7 @@
       "ecosystem": "Kubernetes operator",
       "relationship": "default database provisioning integration",
       "metadataSource": "tasks/digital-energy-twin.yml",
-      "notes": "Reconciles the acid.zalan.do/v1 postgresql resource used in the default central-database mode; not used when a managed database is configured.",
+      "notes": "Reconciles the acid.zalan.do/v1 postgresql resource used to provision the addon database on central-db or another existing Zalando cluster; not used in existing-database mode.",
       "license": "MIT"
     }
   ]

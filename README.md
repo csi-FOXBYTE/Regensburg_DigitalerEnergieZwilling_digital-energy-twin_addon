@@ -48,17 +48,34 @@ such as `dev` or `latest` to the corresponding version for each application.
 
 ### Database
 
-If `inv_addons.digital-energy-twin.db` is omitted, the addon uses the platform
-`central-db`. It declaratively creates a `digital_energy_twin` database and a
-dedicated owner user through the Zalando Postgres operator. The backend does not
-use the `postgres` database or its superuser credentials.
+The addon supports three modes. The examples below show only database-related
+inventory; merge the selected example into your normal Civitas Core inventory.
 
-To use a database managed by the platform operator, define `db` explicitly:
+**1. Create the addon database on `central-db` (default)**
+
+```yaml
+inv_central_db:
+  enable: true
+  ns_name: "{{ ENVIRONMENT }}-database-stack"
+  port: "5432"
+
+inv_addons:
+  digital-energy-twin:
+    # Omit db entirely.
+    enable: true
+```
+
+The addon requests `digital_energy_twin` and its dedicated owner user through
+the Zalando Postgres operator on the platform's existing `central-db` cluster.
+The backend uses the owner credentials, not the `postgres` superuser.
+
+**2. Connect to an existing database**
 
 ```yaml
 inv_addons:
   digital-energy-twin:
     db:
+      mode: existing
       ns_name: "dev-databases"
       db_address: "postgres.dev-databases.svc.cluster.local"
       db_name: "digital_energy_twin"
@@ -66,14 +83,60 @@ inv_addons:
       user_k8s_secret: "digital-energy-twin.credentials"
 ```
 
-`ns_name`, `db_address`, `db_name`, and `user_k8s_secret` are required in
-managed mode. `port` is optional and defaults to `5432`. The referenced Secret
+`mode: existing` is optional: existing inventories with `db` and no `mode`
+continue to select this mode. `ns_name`, `db_address`, `db_name`, and
+`user_k8s_secret` are required. `port` is optional and defaults to `5432`.
+The referenced Secret in `db.ns_name`
 must contain the keys `username` and `password`. The database and user must
-already exist; managed mode does not modify the supplied PostgreSQL server.
+already exist; the addon does not provision databases or roles in this mode.
 
-In both modes, the addon copies the assembled connection URL into the
+**3. Create the addon database on another Zalando PostgreSQL cluster**
+
+```yaml
+inv_addons:
+  digital-energy-twin:
+    db:
+      mode: zalando
+      ns_name: "dev-databases"
+      cluster_name: "energy-db"
+      db_address: "energy-db.dev-databases.svc.cluster.local"
+      db_name: "digital_energy_twin"
+      port: "5432"  # Optional; defaults to 5432.
+```
+
+`ns_name`, `cluster_name`, `db_address`, and `db_name` are required.
+`cluster_name` identifies an existing `acid.zalan.do/v1` `postgresql` resource
+in `ns_name`, in the Kubernetes cluster selected by the addon's kubeconfig and
+the platform context. `db_address` must point to that PostgreSQL cluster's
+writable service. The addon creates a logical database within this cluster;
+the platform operator remains responsible for deploying the PostgreSQL server.
+
+The addon checks that the cluster exists and merges the requested database into
+`spec.preparedDatabases`, preserving other database entries and cluster settings.
+The Zalando operator creates the database and its default roles/users, and the
+addon waits for the owner credentials Secret before configuring the backend.
+Database names must start with a lowercase letter, contain only lowercase
+letters, digits, and underscores, and be at most 51 characters long to accommodate
+the generated role names.
+
+With Civitas Core's operator defaults, the owner Secret in `ns_name` is named
+`<database-with-hyphens>-owner-user.<cluster_name>.credentials.postgresql.acid.zalan.do`.
+For this example it is
+`digital-energy-twin-owner-user.energy-db.credentials.postgresql.acid.zalan.do`.
+If the operator uses a custom naming template, set `db.user_k8s_secret` to the
+generated owner Secret's name. It must contain `username` and `password`.
+
+The addon's kubeconfig must allow reading and patching the target `postgresql`
+resource and reading Secrets in its namespace. The Zalando operator must watch
+that namespace and have database access enabled; Civitas Core's default operator
+configuration watches all namespaces and enables database access. This mode
+does not require `inv_central_db.enable` or the platform-wide `inv_mngd_db` switch.
+
+In all three modes, the addon copies the assembled connection URL into the
 `digital-energy-twin-database` Secret in its own namespace. The backend and its
 migration init container consume `DATABASE_URL` through `secretKeyRef`.
+The init container runs `zenstack migrate deploy` to apply the application schema.
+Changing the selected server or database does not transfer existing data.
 
 Existing installations that used the `postgres` database must migrate any data
 that should be retained before switching. The addon initializes the new logical

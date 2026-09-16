@@ -21,12 +21,26 @@ all:
             tiles_url: "https://tiles.{{ DOMAIN }}"
             terrain_url: "https://terrain.{{ DOMAIN }}"
             address_database_url: "https://tiles.{{ DOMAIN }}/det-rg-addresses.sqlite"
-            # If db is omitted, the addon creates and uses the digital_energy_twin
-            # database with a dedicated owner user on the platform central-db.
-            # Define db only to use a database managed by the platform operator:
+            # Mode 1 (default): omit db to create digital_energy_twin and its
+            # owner user on central-db. Requires inv_central_db.enable: true.
+            #
+            # Mode 2: connect to an existing database and user.
             # db:
+            #   mode: existing  # Optional; default when db is defined.
             #   ns_name: "{{ ENVIRONMENT }}-databases"
             #   db_address: "postgres.{{ ENVIRONMENT }}-databases.svc.cluster.local"
             #   db_name: "digital_energy_twin"
             #   port: "5432"
             #   user_k8s_secret: "digital-energy-twin.credentials"
+            #
+            # Mode 3: create the database and owner on another existing Zalando
+            # PostgreSQL cluster in the same Kubernetes cluster.
+            # db:
+            #   mode: zalando
+            #   ns_name: "{{ ENVIRONMENT }}-databases"
+            #   cluster_name: "energy-db"
+            #   db_address: "energy-db.{{ ENVIRONMENT }}-databases.svc.cluster.local"
+            #   db_name: "digital_energy_twin"
+            #   port: "5432"  # Optional.
+            #   # Optional override for a custom operator Secret naming template:
+            #   # user_k8s_secret: "digital-energy-twin-owner-user.energy-db.credentials.postgresql.acid.zalan.do"
