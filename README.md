@@ -47,7 +47,150 @@ as the single source of truth. Each image has a concrete version `tag` and is
 deployed as `registry/repository:tag`. The release workflow resolves moving tags
 such as `dev` or `latest` to the corresponding version for each application.
 
-### Database
+Before deploying, choose the [database mode](#database), check
+[platform routing](#platform-routing), and prepare [S3 CORS](#s3-cors-for-map-data).
+
+## Execute
+
+Run the normal Civitas Core playbook. To run addon tasks explicitly, use one of
+these tags:
+
+- `addons` for all configured addons
+- `addon_digital-energy-twin` for this addon only
+
+The optional [deploy script](#deploy-script) runs the playbook through your Ansible host.
+
+## Admin frontend access
+
+The public frontend at `https://{{ public_host }}` is open without login.
+The admin frontend at `https://{{ admin_host }}` requires a Keycloak account
+with at least one of the addon client roles below. Replace these placeholders
+with the hostnames from your inventory.
+
+**A Keycloak administrator must grant users access by assigning the required
+client role**, either directly or through a group. The addon creates `manager`,
+`maintainer`, and `admin` on the client configured by `oidc_client_id` (default:
+`digital-energy-twin`), but does not assign these roles to users or groups.
+Having a Keycloak account alone does not grant admin frontend access.
+
+| Client role | Visible admin frontend areas | Granted access |
+| --- | --- | --- |
+| `manager` | Dashboard, Gebäudeliste (building list) | View and manage submissions, including assignment, review, approval, rejection, and deletion. No configuration or feedback administration. |
+| `maintainer` | Systempflege (system maintenance) | Read, create, activate, and delete calculation configurations; read and delete feedback through the admin API. No submission administration. |
+| `admin` | Dashboard, Gebäudeliste, Systempflege | All submission, configuration, and feedback permissions listed above. |
+
+Permissions from multiple roles combine. These roles grant access within the
+Digital Energy Twin; the addon `admin` role does not grant Keycloak
+administration rights. The backend enforces permissions on individual API
+operations as well as the frontend restricting visible areas.
+
+### Grant access in Keycloak
+
+1. Sign in to the Keycloak administration console with an account permitted to
+   manage user role assignments. Select the existing platform realm configured
+   by `inv_access.tenant.realm_name`.
+2. Open **Users** and select the intended user. If necessary, create their
+   account and configure login credentials according to your platform's normal
+   onboarding process.
+3. Open **Role mapping** → **Assign role**, filter by client roles, and select
+   the addon client (`digital-energy-twin` by default).
+4. Choose `manager`, `maintainer`, or `admin` according to the table, then click
+   **Assign**. Use the roles belonging to this client; a realm role or an
+   Airflow client role with a similar name does not grant addon access.
+5. Ask the user to sign out and sign in again at the admin frontend URL so that
+   their session contains the new roles. Verify that the expected areas appear.
+
+For group-based access, assign the same client roles to a Keycloak group and
+add the users to that group. See Keycloak's [user role mappings documentation](https://www.keycloak.org/docs/latest/server_admin/#user-role-mappings).
+
+If login succeeds but access is denied or areas are missing, check the realm,
+client, effective role assignments, and that the user has signed in again.
+To remove access, remove the direct role assignments and any group memberships
+that grant them; existing sessions may retain roles until their tokens are
+renewed or the sessions are revoked by an administrator.
+
+## S3 CORS for map data
+
+The public frontend requests `/api/public/map-resources` from the backend, then
+downloads data **directly from the returned URLs**: `tiles_url` supplies
+`tileset.json` and its referenced 3D tiles, `terrain_url` supplies `layer.json`
+and its terrain tiles, and `address_database_url` supplies the SQLite database
+for address search. The backend does not proxy these downloads.
+
+For storage on another origin, configure CORS on every S3/S3-compatible bucket
+serving those files. The addon does not configure bucket CORS, and
+`backend_cors_additional_origins` only affects backend API routes.
+
+In the AWS S3 console, open the bucket's **Permissions → Cross-origin resource
+sharing (CORS)** settings and merge this rule with any existing rules. Use the
+equivalent bucket CORS settings/API for other S3-compatible services:
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://det.example.com"],
+    "AllowedMethods": ["GET", "HEAD"],
+    "AllowedHeaders": ["*"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+Replace the example origin with the deployed public frontend origin,
+`https://{{ public_host }}` after resolving the inventory. Include the scheme
+and any non-default port, without a path or trailing slash. Add development or
+other frontend origins only as needed. `GET` covers the downloads; `HEAD`
+permits header checks. S3 handles preflight `OPTIONS` automatically; do not
+include it in `AllowedMethods`. See the [S3 CORS configuration reference](https://docs.aws.amazon.com/AmazonS3/latest/userguide/ManageCorsUsing.html).
+
+All configured URLs and referenced files must be browser-accessible over HTTPS
+without an interactive login. The frontend supplies no S3 credentials or signed
+requests. Configure read access separately: CORS does not grant object access.
+Any gateway/CDN serving the bucket must forward origin/preflight headers, permit
+`OPTIONS`, preserve CORS response headers, and cache responses appropriately
+when they vary by origin.
+
+To verify, reload the public frontend with the browser Network tab open and try
+address search. Check the external manifests, tile files, and SQLite download
+for successful responses with `Access-Control-Allow-Origin` matching the
+frontend origin (or `*` for deliberately unrestricted CORS). Opening a file URL
+in a browser tab alone does not verify CORS. Check permissions and paths for
+`403`/`404` responses; a flat globe can indicate failed terrain loading.
+
+## Backend Environment
+
+### `tiles_url`
+
+Base URL of the external tiles server. The backend publishes this base URL
+to the public frontend through the map-resources endpoint and retains the
+legacy tile redirect route for compatibility.
+Must be set explicitly — there is no default, as this is an external service that varies per deployment.
+
+```yaml
+tiles_url: "https://tiles.example.com"
+```
+
+### `terrain_url`
+
+Base URL of the external Cesium terrain server. The backend publishes it to
+the public frontend through the map-resources endpoint and retains the legacy
+terrain redirect route for compatibility.
+
+```yaml
+terrain_url: "https://terrain.example.com"
+```
+
+### `address_database_url`
+
+URL of the SQLite address database downloaded by the public frontend. The
+backend publishes it together with the tiles and terrain URLs through the
+map-resources endpoint.
+
+```yaml
+address_database_url: "https://tiles.example.com/det-rg-addresses.sqlite"
+```
+
+## Database
 
 The addon supports three modes. The examples below show only database-related
 inventory; merge the selected example into your normal Civitas Core inventory.
@@ -227,12 +370,6 @@ Ingress or Gateway/HTTPRoute resources named `digital-energy-twin-admin-host`,
 Gateway HTTPRoutes with the `-redirect` suffix where applicable. Routes live in
 the APISIX namespace; older addon versions also used the addon namespace.
 
-### Hosts
-
-- `admin_host` -> admin frontend
-- `public_host` -> public frontend
-- `backend_host` -> backend API
-
 ### APISIX route matrix
 
 `admin_host`:
@@ -253,21 +390,8 @@ the APISIX namespace; older addon versions also used the addon namespace.
 - `/docs` -> open
 - `/docs/*` -> open
 
-### OIDC client roles and route checks
-
-The addon ensures client roles exist in Keycloak for the OIDC client:
-
-- `admin`
-- `manager`
-- `maintainer`
-
-Role checks in APISIX:
-
-- `admin_host /*` and `admin_host /api/*` require at least one of `admin`, `manager`, or `maintainer`
-- `backend_host /api/admin/*` requires at least one of `admin`, `manager`, or `maintainer`
-- `public_host` is open, while `/api/admin/*` is explicitly blocked on that host
-
-Note: roles are created automatically, but user/group role assignments are not managed by this addon.
+Application permissions and role assignment are described in
+[Admin frontend access](#admin-frontend-access).
 
 ### Backend APISIX plugins
 
@@ -284,51 +408,10 @@ CORS defaults to:
 
 You can extend allowed origins with `backend_cors_additional_origins`.
 
-## Backend Environment
-
-### `tiles_url`
-
-Base URL of the external tiles server. The backend publishes this base URL
-to the public frontend through the map-resources endpoint and retains the
-legacy tile redirect route for compatibility.
-Must be set explicitly — there is no default, as this is an external service that varies per deployment.
-
-```yaml
-tiles_url: "https://tiles.example.com"
-```
-
-### `terrain_url`
-
-Base URL of the external Cesium terrain server. The backend publishes it to
-the public frontend through the map-resources endpoint and retains the legacy
-terrain redirect route for compatibility.
-
-```yaml
-terrain_url: "https://terrain.example.com"
-```
-
-### `address_database_url`
-
-URL of the SQLite address database downloaded by the public frontend. The
-backend publishes it together with the tiles and terrain URLs through the
-map-resources endpoint.
-
-```yaml
-address_database_url: "https://tiles.example.com/det-rg-addresses.sqlite"
-```
-
 ## Security Requirements
 
 - Non-root container runtime is enforced via pod/container `securityContext` in all deployment templates.
 - Images must support non-root execution.
-
-## Execute
-
-Run the normal Civitas Core playbook. To run addon tasks explicitly, use one of
-these tags:
-
-- `addons` for all configured addons
-- `addon_digital-energy-twin` for this addon only
 
 ## Deploy script
 
