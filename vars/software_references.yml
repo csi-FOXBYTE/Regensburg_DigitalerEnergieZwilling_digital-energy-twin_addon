@@ -1,4 +1,6 @@
 ---
+# Current selection. The monorepo release-preparation workflow replaces this file
+# with vars/application_release.json after v1.7.3 is published and reviewed.
 software:
   digital-energy-twin:
     admin:

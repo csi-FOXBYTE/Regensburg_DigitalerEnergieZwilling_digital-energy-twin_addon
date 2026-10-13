@@ -64,6 +64,17 @@ spec:
                   key: DATABASE_URL
             - name: PORT
               value: "{{ digital_energy_twin_backend_port | string }}"
+{% if digital_energy_twin_feedback_mail_to | default("") %}
+            - name: SMTP_URL
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ digital_energy_twin_smtp_secret_name }}"
+                  key: SMTP_URL
+            - name: FEEDBACK_MAIL_FROM
+              value: "{{ inv_email.email_from }}"
+            - name: FEEDBACK_MAIL_TO
+              value: "{{ digital_energy_twin_feedback_mail_to }}"
+{% endif %}
             - name: KEYCLOAK_JWKS_URI
               value: "{{ inv_access.platform.hostname }}/realms/{{ inv_access.tenant.realm_name }}/protocol/openid-connect/certs"
             - name: TILES_URL

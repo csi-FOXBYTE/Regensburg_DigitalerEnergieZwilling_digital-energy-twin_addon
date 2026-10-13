@@ -23,6 +23,11 @@ spec:
         - name: admin
           image: "{{ digital_energy_twin_admin_image }}"
           imagePullPolicy: Always
+{% if digital_energy_twin_application_version %}
+          env:
+            - name: APP_VERSION
+              value: "{{ digital_energy_twin_application_version }}"
+{% endif %}
           securityContext:
             runAsNonRoot: true
             runAsUser: 101

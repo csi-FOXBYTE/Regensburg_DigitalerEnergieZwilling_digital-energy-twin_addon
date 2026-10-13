@@ -22,6 +22,7 @@ from cyclonedx.validation import make_schemabased_validator
 REPOSITORY_DIR = Path(__file__).resolve().parents[1]
 CONFIG_PATH = REPOSITORY_DIR / "sbom.config.json"
 SOFTWARE_REFERENCES_PATH = REPOSITORY_DIR / "vars" / "software_references.yml"
+APPLICATION_RELEASE_PATH = REPOSITORY_DIR / "vars" / "application_release.json"
 JSON_OUTPUT_PATH = REPOSITORY_DIR / "SBOM.cdx.json"
 CSV_OUTPUT_PATH = REPOSITORY_DIR / "SBOM.csv"
 JSON_TEMPORARY_PATH = REPOSITORY_DIR / ".SBOM.cdx.tmp.json"
@@ -65,7 +66,32 @@ def get_property(component: dict[str, Any], name: str) -> str | None:
 
 
 def read_image_references() -> dict[str, dict[str, str]]:
-    """Read the small, fixed-shape image map without adding a YAML dependency."""
+    """Read the selected release manifest, or the existing tag-based selection."""
+    if APPLICATION_RELEASE_PATH.is_file():
+        release = json.loads(APPLICATION_RELEASE_PATH.read_text(encoding="utf-8"))[
+            "digital_energy_twin_application_release"]
+        if release["repository"] != "csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_MonoRepo":
+            raise ValueError("Unexpected application release repository")
+        manifest = release["manifest"]
+        if release["tag"] != f"v{manifest['appVersion']}":
+            raise ValueError("Application release tag does not match its manifest")
+        images = {}
+        for key, component in (("admin", "adminfrontend"), ("public", "frontend"), ("backend", "backend")):
+            artifact = manifest[component]
+            images[key] = {
+                "image": artifact["image"],
+                "version": manifest["appVersion"],
+                "bom_ref": f"oci:{artifact['image']}@{artifact['digest']}",
+                "digest": artifact["digest"],
+                "build": artifact["build"],
+                "source_commit": artifact["sourceCommit"],
+                "release_source": manifest["sourceCommit"],
+                "sbom_sha256": manifest["sboms"]["files"][f"{component}.cdx.json"],
+                "metadata_source": "vars/application_release.json",
+            }
+        return images
+
+    # Existing deployments keep their selected images until a monorepo release is adopted.
     images: dict[str, dict[str, str]] = {}
     current: str | None = None
     section_pattern = re.compile(r"^    ([a-z][a-z0-9_-]*):\s*$")
@@ -84,6 +110,10 @@ def read_image_references() -> dict[str, dict[str, str]]:
     for key, values in images.items():
         for field in ("registry", "repository", "tag"):
             require_string(values.get(field), f"software reference {key}.{field}")
+        values["image"] = f"{values['registry']}/{values['repository']}"
+        values["version"] = values["tag"]
+        values["bom_ref"] = f"oci:{values['image']}:{values['tag']}"
+        values["metadata_source"] = "vars/software_references.yml"
     return images
 
 
@@ -200,13 +230,13 @@ def create_bom(config: dict[str, Any]) -> dict[str, Any]:
             raise ValueError(f"{location}.sourceKey does not exist in software references")
         configured_keys.add(source_key)
         reference = image_references[source_key]
-        name = f"{reference['registry']}/{reference['repository']}"
-        tag = reference["tag"]
+        name = reference["image"]
+        version = reference["version"]
         component = {
             "type": "container",
-            "bom-ref": f"oci:{name}:{tag}",
+            "bom-ref": reference["bom_ref"],
             "name": name,
-            "version": tag,
+            "version": version,
             "scope": "required",
             "licenses": [{"license": {"id": require_string(entry.get("license"), f"{location}.license")}}],
         }
@@ -215,12 +245,26 @@ def create_bom(config: dict[str, Any]) -> dict[str, Any]:
             repository,
             "OCI container",
             require_string(entry.get("relationship"), f"{location}.relationship"),
-            "vars/software_references.yml",
+            reference["metadata_source"],
             require_string(entry.get("notes"), f"{location}.notes"),
         )
+        if "digest" in reference:
+            set_property(component, "regensburg:image-digest", reference["digest"])
+            set_property(component, "regensburg:build", reference["build"])
+            set_property(component, "regensburg:release-source", reference["release_source"])
         child_bom = read_child_bom(entry, location)
         if child_bom:
             child, child_path, bom_link, hashes = child_bom
+            if "digest" in reference:
+                metadata = child["metadata"]
+                child_properties = {item["name"]: item["value"] for item in metadata.get("properties", [])}
+                root_properties = {item["name"]: item["value"] for item in metadata["component"].get("properties", [])}
+                if (f"sha256:{hashes[0]['content']}" != reference["sbom_sha256"]
+                    or child_properties.get("regensburg:image-digest") != reference["digest"]
+                    or child_properties.get("regensburg:release-source") != reference["release_source"]
+                    or metadata["component"].get("version") != f"build-{reference['build']}"
+                    or root_properties.get("vcs:commit") != reference["source_commit"]):
+                    raise ValueError(f"Child SBOM does not match selected release: {source_key}")
             child_root_ref = child["metadata"]["component"]["bom-ref"]
             relative_path = child_path.relative_to(REPOSITORY_DIR).as_posix()
             release_url = (
@@ -246,14 +290,9 @@ def create_bom(config: dict[str, Any]) -> dict[str, Any]:
             ]
             set_property(component, "sbom:child-bom-path", relative_path)
             set_property(component, "sbom:child-bom-link", bom_link)
-            set_property(
-                component,
-                "sbom:attestation-repository",
-                require_string(
-                    entry.get("attestationRepository"),
-                    f"{location}.attestationRepository",
-                ),
-            )
+            repository_field = "releaseRepository" if "releaseRepository" in entry else "attestationRepository"
+            set_property(component, f"sbom:{'release' if repository_field == 'releaseRepository' else 'attestation'}-repository",
+                         require_string(entry.get(repository_field), f"{location}.{repository_field}"))
             component_dependencies[component["bom-ref"]] = [
                 f"{bom_link}#{quote(child_root_ref, safe='')}"
             ]
@@ -336,7 +375,7 @@ def create_bom(config: dict[str, Any]) -> dict[str, Any]:
                 {
                     "name": "sbom:container-detail",
                     "value": (
-                        f"Container components are version-tagged inventory references; "
+                        f"Container components are selected image references; "
                         f"{child_bom_count} of {len(image_config)} verified child SBOMs are "
                         "bundled and connected through hashed CycloneDX BOM-Link references"
                     ),

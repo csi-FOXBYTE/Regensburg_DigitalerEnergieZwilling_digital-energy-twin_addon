@@ -1,8 +1,9 @@
 # Modular application SBOMs
 
-The release-preparation workflow resolves each application's version tag,
-verifies its CycloneDX SBOM attestation by image digest, and writes the verified
-predicates here:
+The release-preparation workflow reads all three application image digests from
+one completed monorepo release manifest. It checks each child CycloneDX SBOM
+against that manifest's hash, release source, image digest and build identity,
+then writes the verified documents here:
 
 - `admin.cdx.json`
 - `public.cdx.json`
@@ -11,4 +12,5 @@ predicates here:
 The addon SBOM links each container component to its corresponding child BOM
 using a CycloneDX BOM-Link, a release-pinned download URL, and cryptographic
 hashes. Do not populate these files from an unverified branch or mutable image
-tag.
+tag. The currently checked-in documents describe the earlier tag-based selection
+until the v1.7.3 monorepo release is adopted.

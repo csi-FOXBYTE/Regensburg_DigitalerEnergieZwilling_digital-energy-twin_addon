@@ -3,11 +3,15 @@ name: Prepare application release
 on:
   workflow_dispatch:
     inputs:
-      image_tag:
-        description: "Application image tag to resolve to concrete versions (for example dev or latest)"
+      application_release_tag:
+        description: "Completed monorepo release tag to adopt (for example v1.7.3)"
         required: true
-        default: "dev"
         type: string
+      allow_prerelease:
+        description: "Allow a completed application prerelease"
+        required: true
+        default: false
+        type: boolean
       release_tag:
         description: "Addon release tag (leave empty to use the next minor version)"
         required: false
@@ -15,17 +19,40 @@ on:
 
 permissions:
   contents: write
-  packages: read
   pull-requests: write
 
 jobs:
   prepare-release:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout addon
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Validate requested application tag
+        env:
+          APPLICATION_TAG: ${{ inputs.application_release_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$APPLICATION_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Select an exact application release tag such as v1.7.3" >&2
+            exit 1
+          fi
+
+      - name: Checkout the selected monorepo tag
+        uses: actions/checkout@v4
+        with:
+          repository: csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_MonoRepo
+          ref: ${{ inputs.application_release_tag }}
+          path: .local/application-source
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .local/application-source/.node-version
 
       - name: Resolve addon release tag
         id: release
@@ -40,160 +67,78 @@ jobs:
             | sort -V \
             | tail -n 1)
 
-          if [[ -z "${latest_version}" ]]; then
+          if [[ -z "$latest_version" ]]; then
             suggested_tag="v0.1.0"
           else
-            IFS=. read -r major minor _patch <<< "${latest_version}"
+            IFS=. read -r major minor _patch <<< "$latest_version"
             suggested_tag="v${major}.$((minor + 1)).0"
           fi
 
-          if [[ -n "${REQUESTED_TAG}" ]]; then
-            release_tag="${REQUESTED_TAG}"
-          else
-            release_tag="${suggested_tag}"
-          fi
-
-          if [[ ! "${release_tag}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "release_tag must be a semantic version such as v0.4.0" >&2
+          release_tag="${REQUESTED_TAG:-$suggested_tag}"
+          if [[ ! "$release_tag" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "release_tag must be a semantic version such as v1.8.0" >&2
             exit 1
           fi
-
-          release_version="${release_tag#v}"
           {
-            echo "tag=${release_tag}"
-            echo "version=${release_version}"
-            echo "suggested_tag=${suggested_tag}"
-          } >> "${GITHUB_OUTPUT}"
+            echo "tag=$release_tag"
+            echo "suggested_tag=$suggested_tag"
+          } >> "$GITHUB_OUTPUT"
 
-          {
-            echo "### Release preparation"
-            echo
-            echo "- Selected addon tag: \`${release_tag}\`"
-            echo "- Suggested next minor tag: \`${suggested_tag}\`"
-            echo "- Application image tag: \`${{ inputs.image_tag }}\`"
-          } >> "${GITHUB_STEP_SUMMARY}"
-
-      - name: Validate application image tag
+      - name: Fetch and validate the completed application release
+        id: application
         env:
-          IMAGE_TAG: ${{ inputs.image_tag }}
+          GH_TOKEN: ${{ github.token }}
+          APPLICATION_TAG: ${{ inputs.application_release_tag }}
+          ALLOW_PRERELEASE: ${{ inputs.allow_prerelease }}
         shell: bash
         run: |
           set -euo pipefail
-          if [[ ! "${IMAGE_TAG}" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
-            echo "image_tag is not a valid OCI image tag" >&2
-            exit 1
+          mkdir -p .local/application-release
+          gh api "repos/csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_MonoRepo/releases/tags/$APPLICATION_TAG" \
+            > .local/application-release/release.json
+          cp .local/application-source/release/manifest.json .local/application-release/manifest.json
+
+          source_commit=$(python3 -c 'import json; print(json.load(open(".local/application-release/manifest.json"))["sourceCommit"])')
+          git -C .local/application-source merge-base --is-ancestor "$source_commit" HEAD
+
+          options=()
+          if [[ "$ALLOW_PRERELEASE" == true ]]; then
+            options+=(--allow-prerelease)
           fi
+          node .local/application-source/scripts/deploy/select-release.mjs \
+            .local/application-release/release.json .local/application-release/manifest.json \
+            "${options[@]}" > .local/application-release/selection.json
 
-      - name: Set up crane
-        uses: imjasonh/setup-crane@v0.4
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
 
-      - name: Authenticate to GHCR
-        run: crane auth login ghcr.io -u "${{ github.actor }}" -p "${{ secrets.GITHUB_TOKEN }}"
+          selected = json.loads(Path('.local/application-release/selection.json').read_text())
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+              output.write(f"tag=v{selected['appVersion']}\n")
+              output.write(f"version={selected['appVersion']}\n")
+              for component in ('adminfrontend', 'frontend', 'backend'):
+                  output.write(f"{component}_image={selected['images'][component]}\n")
+          PY
 
-      - name: Resolve application version tags
-        id: images
+      - name: Record the manifest selection and bundled application SBOMs
         env:
-          IMAGE_TAG: ${{ inputs.image_tag }}
+          ADDON_TAG: ${{ steps.release.outputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
-          resolve_version() {
-            local component="$1"
-            local image="$2"
-            local digest version version_digest
-
-            digest=$(crane digest "${image}:${IMAGE_TAG}")
-            version=$(crane config "${image}@${digest}" \
-              | python -c 'import json, sys; print(json.load(sys.stdin)["config"]["Labels"]["org.opencontainers.image.version"])')
-            if [[ ! "${version}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]] || (( ${#version} > 128 )); then
-              echo "${image}:${IMAGE_TAG} has no valid concrete version label" >&2
-              exit 1
-            fi
-
-            version_digest=$(crane digest "${image}:${version}")
-            if [[ "${version_digest}" != "${digest}" ]]; then
-              echo "${image}:${version} does not match the image selected by ${IMAGE_TAG}" >&2
-              exit 1
-            fi
-
-            {
-              echo "${component}_tag=${version}"
-              echo "${component}_digest=${digest}"
-            } >> "${GITHUB_OUTPUT}"
-          }
-
-          resolve_version admin ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_adminfrontend
-          resolve_version public ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_frontend
-          resolve_version backend ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_backend
-
-      - name: Verify and bundle application SBOMs
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ADMIN_DIGEST: ${{ steps.images.outputs.admin_digest }}
-          PUBLIC_DIGEST: ${{ steps.images.outputs.public_digest }}
-          BACKEND_DIGEST: ${{ steps.images.outputs.backend_digest }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p sboms
-
-          fetch_sbom() {
-            local image="$1"
-            local digest="$2"
-            local repository="$3"
-            local output="$4"
-
-            gh attestation verify "oci://${image}@${digest}" \
-              --repo "${repository}" \
-              --predicate-type https://cyclonedx.org/bom \
-              --format json \
-              --jq '.[0].verificationResult.statement.predicate' \
-              > "${output}"
-            python -m json.tool "${output}" > /dev/null
-          }
-
-          fetch_sbom \
-            ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_adminfrontend \
-            "${ADMIN_DIGEST}" \
-            csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_AdminFrontend \
-            sboms/admin.cdx.json
-          fetch_sbom \
-            ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_frontend \
-            "${PUBLIC_DIGEST}" \
-            csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_Frontend \
-            sboms/public.cdx.json
-          fetch_sbom \
-            ghcr.io/csi-foxbyte/regensburg_digitalerenergiezwilling_backend \
-            "${BACKEND_DIGEST}" \
-            csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_Backend \
-            sboms/backend.cdx.json
-
-      - name: Update release inputs
-        env:
-          ADMIN_TAG: ${{ steps.images.outputs.admin_tag }}
-          PUBLIC_TAG: ${{ steps.images.outputs.public_tag }}
-          BACKEND_TAG: ${{ steps.images.outputs.backend_tag }}
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
-          RELEASE_VERSION: ${{ steps.release.outputs.version }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          yq -i '.software."digital-energy-twin".admin.tag = strenv(ADMIN_TAG)' vars/software_references.yml
-          yq -i '.software."digital-energy-twin".public.tag = strenv(PUBLIC_TAG)' vars/software_references.yml
-          yq -i '.software."digital-energy-twin".backend.tag = strenv(BACKEND_TAG)' vars/software_references.yml
-
-          yq -o=json -i '
-            .releaseTag = strenv(RELEASE_TAG) |
-            .rootComponent.version = strenv(RELEASE_VERSION) |
-            .rootComponent."bom-ref" = "pkg:generic/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon@" + strenv(RELEASE_VERSION) |
-            .rootComponent.purl = "pkg:generic/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon@" + strenv(RELEASE_VERSION)
-          ' sbom.config.json
+          python3 scripts/adopt_application_release.py \
+            .local/application-source \
+            .local/application-release/release.json \
+            .local/application-release/selection.json \
+            "$ADDON_TAG" .
 
       - name: Generate and validate addon SBOM
         shell: bash
         run: |
           set -euo pipefail
-          python -m venv .sbom-env
+          python3 -m venv .sbom-env
           .sbom-env/bin/python -m pip install --requirement requirements-sbom.txt
           SBOM_REQUIRE_CHILD_BOMS=1 .sbom-env/bin/python scripts/generate_sbom.py
 
@@ -204,17 +149,21 @@ jobs:
           branch: prepare-release/${{ steps.release.outputs.tag }}
           title: "chore: prepare addon release ${{ steps.release.outputs.tag }}"
           body: |
-            Prepares the Digital Energy Twin addon release `${{ steps.release.outputs.tag }}`.
+            Adopts the completed monorepo application release `${{ steps.application.outputs.tag }}`
+            for addon release `${{ steps.release.outputs.tag }}`. The selected manifest,
+            digest-pinned images, and matching child SBOMs are included for review.
 
-            The pull request is intentionally left open for manual review. Merging it does not create a Git tag or release.
+            | Component | Image |
+            |-----------|-------|
+            | admin | `${{ steps.application.outputs.adminfrontend_image }}` |
+            | public | `${{ steps.application.outputs.frontend_image }}` |
+            | backend | `${{ steps.application.outputs.backend_image }}` |
 
-            | Component | Image tag | Digest | Modular SBOM |
-            |-----------|-----------|--------|--------------|
-            | admin | `${{ steps.images.outputs.admin_tag }}` | `${{ steps.images.outputs.admin_digest }}` | `sboms/admin.cdx.json` |
-            | public | `${{ steps.images.outputs.public_tag }}` | `${{ steps.images.outputs.public_digest }}` | `sboms/public.cdx.json` |
-            | backend | `${{ steps.images.outputs.backend_tag }}` | `${{ steps.images.outputs.backend_digest }}` | `sboms/backend.cdx.json` |
+            The pull request remains open for manual review. Merging it does not
+            create an addon Git tag or release. Check the selected monorepo release
+            and tag again before merging.
 
-            Suggested next minor tag when this workflow started: `${{ steps.release.outputs.suggested_tag }}`.
+            Suggested next minor addon tag: `${{ steps.release.outputs.suggested_tag }}`.
           commit-message: "chore: prepare addon release ${{ steps.release.outputs.tag }}"
           draft: true
           delete-branch: true

@@ -128,6 +128,18 @@
       Define inv_addons['digital-energy-twin'].db to use another database server.
   when: digital_energy_twin_db_mode == 'central'
 
+- name: "Digital Energy Twin: Validate selected application release"
+  ansible.builtin.assert:
+    that:
+      - digital_energy_twin_application_release.repository == 'csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_MonoRepo'
+      - digital_energy_twin_application_release.manifest.schema == 2
+      - digital_energy_twin_application_release.tag == 'v' ~ digital_energy_twin_application_release.manifest.appVersion
+      - digital_energy_twin_application_release.manifest.adminfrontend.digest is match('^sha256:[a-f0-9]{64}$')
+      - digital_energy_twin_application_release.manifest.frontend.digest is match('^sha256:[a-f0-9]{64}$')
+      - digital_energy_twin_application_release.manifest.backend.digest is match('^sha256:[a-f0-9]{64}$')
+    fail_msg: "The selected monorepo release is incomplete; prepare it from a completed release manifest."
+  when: digital_energy_twin_application_release is defined
+
 - name: "Digital Energy Twin: Set defaults"
   set_fact:
     digital_energy_twin_enabled: "{{ digital_energy_twin.enable | bool }}"
@@ -138,10 +150,13 @@
     digital_energy_twin_admin_direct_host: "{{ digital_energy_twin.admin_host }}"
     digital_energy_twin_public_direct_host: "{{ digital_energy_twin.public_host }}"
     digital_energy_twin_backend_direct_host: "{{ digital_energy_twin.backend_host }}"
-    digital_energy_twin_admin_image: "{{ software['digital-energy-twin'].admin.registry ~ '/' ~ software['digital-energy-twin'].admin.repository ~ ':' ~ software['digital-energy-twin'].admin.tag }}"
-    digital_energy_twin_public_image: "{{ software['digital-energy-twin'].public.registry ~ '/' ~ software['digital-energy-twin'].public.repository ~ ':' ~ software['digital-energy-twin'].public.tag }}"
-    digital_energy_twin_backend_image: "{{ software['digital-energy-twin'].backend.registry ~ '/' ~ software['digital-energy-twin'].backend.repository ~ ':' ~ software['digital-energy-twin'].backend.tag }}"
+    digital_energy_twin_application_version: "{{ digital_energy_twin_application_release.manifest.appVersion if digital_energy_twin_application_release is defined else '' }}"
+    digital_energy_twin_admin_image: "{{ digital_energy_twin_application_release.manifest.adminfrontend.image ~ '@' ~ digital_energy_twin_application_release.manifest.adminfrontend.digest if digital_energy_twin_application_release is defined else software['digital-energy-twin'].admin.registry ~ '/' ~ software['digital-energy-twin'].admin.repository ~ ':' ~ software['digital-energy-twin'].admin.tag }}"
+    digital_energy_twin_public_image: "{{ digital_energy_twin_application_release.manifest.frontend.image ~ '@' ~ digital_energy_twin_application_release.manifest.frontend.digest if digital_energy_twin_application_release is defined else software['digital-energy-twin'].public.registry ~ '/' ~ software['digital-energy-twin'].public.repository ~ ':' ~ software['digital-energy-twin'].public.tag }}"
+    digital_energy_twin_backend_image: "{{ digital_energy_twin_application_release.manifest.backend.image ~ '@' ~ digital_energy_twin_application_release.manifest.backend.digest if digital_energy_twin_application_release is defined else software['digital-energy-twin'].backend.registry ~ '/' ~ software['digital-energy-twin'].backend.repository ~ ':' ~ software['digital-energy-twin'].backend.tag }}"
     digital_energy_twin_database_secret_name: "digital-energy-twin-database"
+    digital_energy_twin_smtp_secret_name: "digital-energy-twin-smtp"
+    digital_energy_twin_feedback_mail_to: "{{ digital_energy_twin.feedback_mail_to | default('') | trim }}"
     digital_energy_twin_backend_port: "{{ digital_energy_twin.backend_port | default(5000) | int }}"
     digital_energy_twin_admin_port: "{{ digital_energy_twin.admin_port | default(8080) | int }}"
     digital_energy_twin_public_port: "{{ digital_energy_twin.public_port | default(8080) | int }}"
@@ -178,6 +193,29 @@
             X-XSS-Protection: "1; mode=block"
             Strict-Transport-Security: "max-age=31536000; includeSubDomains"
             Content-Security-Policy: "default-src 'self'; frame-ancestors 'none'; base-uri 'self'"
+
+- name: "Digital Energy Twin: Validate feedback mail transport"
+  ansible.builtin.assert:
+    that:
+      - inv_email is defined
+      - inv_email.server is defined and inv_email.server | length > 0
+      - inv_email.port is defined and inv_email.port | int > 0 and inv_email.port | int < 65536
+      - inv_email.starttls is defined
+      - inv_email.user is defined
+      - inv_email.password is defined
+      - inv_email.email_from is defined and inv_email.email_from | length > 0
+    fail_msg: >-
+      feedback_mail_to requires inv_email.server, port, starttls, user,
+      password, and email_from. STARTTLS and implicit TLS are the only
+      supported transport modes.
+  when: digital_energy_twin_enabled and digital_energy_twin_feedback_mail_to | length > 0
+
+- name: "Digital Energy Twin: Build TLS-only SMTP URL"
+  ansible.builtin.set_fact:
+    digital_energy_twin_smtp_url: >-
+      {{ "smtp" if inv_email.starttls | bool else "smtps" }}://{{ ((inv_email.user | urlencode | replace("/", "%2F")) ~ ":" ~ (inv_email.password | urlencode | replace("/", "%2F")) ~ "@") if inv_email.password | length > 0 else "" }}{{ inv_email.server }}:{{ inv_email.port }}
+  when: digital_energy_twin_enabled and digital_energy_twin_feedback_mail_to | length > 0
+  no_log: true
 
 - name: "Digital Energy Twin: Set service names"
   set_fact:
@@ -385,6 +423,23 @@
       stringData:
         DATABASE_URL: "{{ digital_energy_twin_database_url }}"
   when: digital_energy_twin_enabled
+  no_log: true
+
+- name: "Digital Energy Twin: Store SMTP URL in addon namespace"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: "{{ digital_energy_twin_smtp_secret_name }}"
+      type: Opaque
+      stringData:
+        SMTP_URL: "{{ digital_energy_twin_smtp_url }}"
+  when: digital_energy_twin_enabled and digital_energy_twin_feedback_mail_to | length > 0
   no_log: true
 
 - name: "Digital Energy Twin: Ensure placeholder content configmap"

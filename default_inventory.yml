@@ -25,6 +25,8 @@ all:
             tiles_url: "https://tiles.{{ DOMAIN }}"
             terrain_url: "https://terrain.{{ DOMAIN }}"
             address_database_url: "https://tiles.{{ DOMAIN }}/det-rg-addresses.sqlite"
+            # Optional. Configures the backend mail transport when supplied.
+            # feedback_mail_to: "feedback@{{ DOMAIN }}"
             # Mode 1 (default): omit db to create digital_energy_twin and its
             # owner user on central-db. Requires inv_central_db.enable: true.
             #

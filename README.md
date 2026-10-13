@@ -42,10 +42,13 @@ inv_addons:
 ```
 
 By default, the addon works without any `software` section in your deployment inventory.
-Container images are resolved from [vars/software_references.yml](vars/software_references.yml)
-as the single source of truth. Each image has a concrete version `tag` and is
-deployed as `registry/repository:tag`. The release workflow resolves moving tags
-such as `dev` or `latest` to the corresponding version for each application.
+The current checked-in selection remains in
+[vars/software_references.yml](vars/software_references.yml) until the monorepo's
+v1.7.3 release is published and adopted. The **Prepare application release** workflow
+then replaces that file with `vars/application_release.json`, containing the exact
+validated [monorepo release manifest](https://github.com/csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_MonoRepo).
+Deployment reads all three `image@sha256:...` references from that one manifest and
+sets `APP_VERSION` on both static frontends from its `appVersion`.
 
 Before deploying, choose the [database mode](#database), check
 [platform routing](#platform-routing), and prepare [S3 CORS](#s3-cors-for-map-data).
@@ -189,6 +192,26 @@ map-resources endpoint.
 ```yaml
 address_database_url: "https://tiles.example.com/det-rg-addresses.sqlite"
 ```
+
+## Feedback mail transport
+
+Set `feedback_mail_to` under `inv_addons.digital-energy-twin` to provision
+the backend mail transport. When it is omitted, the addon does not set any
+mail environment variables. The current backend mail service is not yet
+connected to feedback submissions, so this setting alone sends no mail.
+
+```yaml
+inv_addons:
+  digital-energy-twin:
+    feedback_mail_to: "feedback@example.com"
+```
+
+The addon reads the host, port, credentials, sender address, and `starttls`
+from Civitas Core `inv_email`. With `starttls: true`, it creates an
+`smtp://` URL; the backend requires STARTTLS before sending. With
+`starttls: false`, it creates an `smtps://` URL for TLS from connection
+start. Both modes require TLS. The SMTP URL is stored in a Kubernetes
+Secret and supplied only to the backend container.
 
 ## Database
 
@@ -444,7 +467,7 @@ Then run:
 
 The checked-in [`SBOM.cdx.json`](SBOM.cdx.json) is a CycloneDX 1.6 inventory;
 [`SBOM.csv`](SBOM.csv) provides the same components in a review-friendly table.
-It covers the addon, all three application images referenced by version tag,
+It covers the addon and all three selected application images,
 the software needed to execute its Ansible tasks, and the platform services the
 deployed app directly uses. The application inventories remain separate CycloneDX documents
 under `sboms/`; the addon SBOM connects them to the corresponding containers
@@ -458,21 +481,24 @@ python3 -m venv .sbom-env
 .sbom-env/bin/python scripts/generate_sbom.py
 ```
 
-Container references are read directly from `vars/software_references.yml`.
+Container references come from `vars/application_release.json` after adoption;
+the current selection still comes from `vars/software_references.yml`.
 Update `sbom.config.json` whenever the addon's control-plane or platform
 integrations change; the generator fails if a new image key has no SBOM entry.
 Set `SBOM_REQUIRE_CHILD_BOMS=1` to require all three verified child documents.
 
-The manually triggered **Prepare application release** workflow accepts an
-application image tag and an optional addon release tag. If the release tag is
-empty, it selects the next minor semantic version (or `v0.1.0` when no release
-tag exists). It reads each image's `org.opencontainers.image.version` label and
-checks that the matching version tag resolves to the same digest as the requested
-tag. It writes those concrete version tags to `vars/software_references.yml`,
-verifies signed CycloneDX attestations using the resolved digests, bundles the
-child SBOMs, updates the addon version, and opens a draft pull request for review.
-It never merges the pull request or
-creates the Git tag. After merging, create the selected addon tag manually.
+The manually triggered **Prepare application release** workflow accepts an exact
+completed monorepo release tag and an optional addon release tag. Current monorepo
+releases are prereleases, so select **Allow a completed application prerelease**
+when preparing v1.7.3. If the addon tag is empty, the workflow suggests the next
+minor version from existing addon tags; the addon and application versions are
+independent. The workflow checks out the selected monorepo tag, verifies that its
+manifest matches the completed GitHub release journal, and checks the release
+SBOM hashes and image identities. It records the full manifest and digest-pinned
+images, bundles the matching child SBOMs, updates the addon version, and opens a
+draft pull request for review. It never merges the pull request or creates the
+addon Git tag. Review the completed monorepo release and tag again before merging;
+after merging, create the selected addon tag through the normal release process.
 
 The repository or organization must allow `GITHUB_TOKEN` to create pull
 requests. `.copier-answers.yml` is deliberately not changed by the release

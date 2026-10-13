@@ -1,2 +1,4 @@
 scripts/.env
 .sbom-env/
+.local/
+__pycache__/
