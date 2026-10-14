@@ -1,0 +1,91 @@
+{
+  "digital_energy_twin_application_release": {
+    "repository": "csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_MonoRepo",
+    "tag": "v1.7.3",
+    "manifest": {
+      "schema": 2,
+      "appVersion": "1.7.3",
+      "previousVersion": "0.1.0",
+      "sourceCommit": "f5d51f7c4b2c8191604995b6f805375def65ddc6",
+      "runId": "38423503882",
+      "frontend": {
+        "image": "ghcr.io/csi-foxbyte/regensburg-web-frontend",
+        "fingerprint": "sha256:f7f41d31ae0facbea32f3933f74e0c74c39b5db31f2c70309978ea7b9ffba173",
+        "digest": "sha256:31a0bb2f5a3ea2ae366775b8675debffb609fe2b960bd5e82ad986781b13410a",
+        "sourceCommit": "f5d51f7c4b2c8191604995b6f805375def65ddc6",
+        "build": "38423503882-1",
+        "platform": "linux/amd64",
+        "baseImage": "node:24.21.0-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20",
+        "runtimeBaseImage": "nginxinc/nginx-unprivileged:1.30.4-alpine@sha256:adf5042a17f4ecdd200c595fa9ffd1be37efb18f89a830bd1a00e4ab4d59d42c",
+        "sbom": {
+          "path": "/usr/share/regensburg/SBOM.cdx.json",
+          "sha256": "sha256:48573b94f3be62148c42128c72260afef970746a4041615d6345c23fb7964927",
+          "version": "build-38423503882-1",
+          "sourceCommit": "f5d51f7c4b2c8191604995b6f805375def65ddc6"
+        }
+      },
+      "adminfrontend": {
+        "image": "ghcr.io/csi-foxbyte/regensburg-web-adminfrontend",
+        "fingerprint": "sha256:1ed256dfaabd45353f03f751bb4d1aa1983676729090707a47b14c549acb13ca",
+        "digest": "sha256:edeeb57927d626feff6823045b25d97a953ac023ff8511b8fb7bf7994a2142bf",
+        "sourceCommit": "f5d51f7c4b2c8191604995b6f805375def65ddc6",
+        "build": "38423503882-1",
+        "platform": "linux/amd64",
+        "baseImage": "node:24.21.0-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20",
+        "runtimeBaseImage": "nginxinc/nginx-unprivileged:1.30.4-alpine@sha256:adf5042a17f4ecdd200c595fa9ffd1be37efb18f89a830bd1a00e4ab4d59d42c",
+        "sbom": {
+          "path": "/usr/share/regensburg/SBOM.cdx.json",
+          "sha256": "sha256:23cdd2b3d563e58a10c48c26483789b7dc086260d22c119d94595a439fec89fe",
+          "version": "build-38423503882-1",
+          "sourceCommit": "f5d51f7c4b2c8191604995b6f805375def65ddc6"
+        }
+      },
+      "backend": {
+        "image": "ghcr.io/csi-foxbyte/regensburg-web-backend",
+        "fingerprint": "sha256:585ccaff282dc8849627e0bc8a2202e09efd244b2e1b215f0eee24bd1163dab6",
+        "digest": "sha256:e77b7b3c651624f713d499eaadc860d3d70352466e3c1500d2c56edac4214c41",
+        "sourceCommit": "f5d51f7c4b2c8191604995b6f805375def65ddc6",
+        "build": "38423503882-1",
+        "platform": "linux/amd64",
+        "baseImage": "node:24.21.0-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20",
+        "runtimeBaseImage": "node:24.21.0-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20",
+        "sbom": {
+          "path": "/usr/share/regensburg/SBOM.cdx.json",
+          "sha256": "sha256:0f0b24e901395d3217f57a270f03b2129892f26baadff42b397bd028e59d4732",
+          "version": "build-38423503882-1",
+          "sourceCommit": "f5d51f7c4b2c8191604995b6f805375def65ddc6"
+        }
+      },
+      "sboms": {
+        "schema": 1,
+        "sourceCommit": "f5d51f7c4b2c8191604995b6f805375def65ddc6",
+        "images": {
+          "frontend": {
+            "digest": "sha256:31a0bb2f5a3ea2ae366775b8675debffb609fe2b960bd5e82ad986781b13410a",
+            "sourceCommit": "f5d51f7c4b2c8191604995b6f805375def65ddc6",
+            "build": "38423503882-1"
+          },
+          "adminfrontend": {
+            "digest": "sha256:edeeb57927d626feff6823045b25d97a953ac023ff8511b8fb7bf7994a2142bf",
+            "sourceCommit": "f5d51f7c4b2c8191604995b6f805375def65ddc6",
+            "build": "38423503882-1"
+          },
+          "backend": {
+            "digest": "sha256:e77b7b3c651624f713d499eaadc860d3d70352466e3c1500d2c56edac4214c41",
+            "sourceCommit": "f5d51f7c4b2c8191604995b6f805375def65ddc6",
+            "build": "38423503882-1"
+          }
+        },
+        "files": {
+          "source.cdx.json": "sha256:e67a2f674e68ad512a2c1e70b153ac5339b54cfdaae2dc87d4af893a88600572",
+          "frontend.cdx.json": "sha256:4a2bf8c43485fd8dd88526da43cbb7aed935799516764c1f4bdd4d30b08ccb35",
+          "frontend-runtime.cdx.json": "sha256:504da03660650df23c598e1ecce833d0e88e2c54919158ebde7fe279ff01788d",
+          "adminfrontend.cdx.json": "sha256:e92c815c9931925ede5643328da7e03df6bc9217e92c545b6a31457370bcc7f4",
+          "adminfrontend-runtime.cdx.json": "sha256:c603364d5a642c601db1e2470ed2b9bb1953fa104166eaad909ea302d5511ee2",
+          "backend.cdx.json": "sha256:94e9dc67dbba29103d7ce75441eeb307e9919394767b84ddd385cedc69086eda",
+          "backend-runtime.cdx.json": "sha256:9a067ae15834bbdba1ca0769a34a0b8e474ed7a07a7bc9c7b304586b2ae20a11"
+        }
+      }
+    }
+  }
+}

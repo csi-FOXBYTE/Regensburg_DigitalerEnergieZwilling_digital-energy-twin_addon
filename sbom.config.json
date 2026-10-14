@@ -1,11 +1,11 @@
 {
-  "releaseTag": "1.7.2",
+  "releaseTag": "v1.7.3",
   "repositorySlug": "csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon",
   "rootComponent": {
     "type": "application",
-    "bom-ref": "pkg:generic/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon@1.7.2",
+    "bom-ref": "pkg:generic/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon@1.7.3",
     "name": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon",
-    "version": "1.7.2",
+    "version": "1.7.3",
     "description": "Civitas Core addon that deploys and integrates the Regensburg digital energy twin application.",
     "licenses": [
       {
@@ -14,32 +14,32 @@
         }
       }
     ],
-    "purl": "pkg:generic/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon@1.7.2"
+    "purl": "pkg:generic/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon@1.7.3"
   },
   "imageComponents": [
     {
       "sourceKey": "admin",
       "sbomPath": "sboms/admin.cdx.json",
-      "attestationRepository": "csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_AdminFrontend",
       "relationship": "deployed application container",
       "notes": "Admin frontend image deployed by the addon; its verified, digest-bound SBOM is maintained as a modular child BOM.",
-      "license": "LGPL-3.0-or-later"
+      "license": "LGPL-3.0-or-later",
+      "releaseRepository": "csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_MonoRepo"
     },
     {
       "sourceKey": "public",
       "sbomPath": "sboms/public.cdx.json",
-      "attestationRepository": "csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_Frontend",
       "relationship": "deployed application container",
       "notes": "Public frontend image deployed by the addon; its verified, digest-bound SBOM is maintained as a modular child BOM.",
-      "license": "LGPL-3.0-or-later"
+      "license": "LGPL-3.0-or-later",
+      "releaseRepository": "csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_MonoRepo"
     },
     {
       "sourceKey": "backend",
       "sbomPath": "sboms/backend.cdx.json",
-      "attestationRepository": "csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_Backend",
       "relationship": "deployed application container",
       "notes": "Backend image used for database migration and application runtime; its verified, digest-bound SBOM is maintained as a modular child BOM.",
-      "license": "LGPL-3.0-or-later"
+      "license": "LGPL-3.0-or-later",
+      "releaseRepository": "csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_MonoRepo"
     }
   ],
   "additionalComponents": [
