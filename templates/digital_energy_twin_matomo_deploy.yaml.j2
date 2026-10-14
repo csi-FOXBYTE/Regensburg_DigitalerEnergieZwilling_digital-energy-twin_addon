@@ -16,6 +16,9 @@ spec:
     metadata:
       labels:
         app: "{{ digital_energy_twin_matomo_name }}"
+      annotations:
+        # The entrypoint reads the client secret only on start.
+        checksum/oidc-client-secret: "{{ digital_energy_twin_matomo_client_secret.json.value | hash('sha256') }}"
     spec:
       securityContext:
         seccompProfile:
@@ -59,6 +62,18 @@ spec:
             # TLS ends at the ingress; Matomo must still build https URLs.
             - name: MATOMO_BEHIND_TLS_PROXY
               value: "1"
+            - name: MATOMO_OIDC_ISSUER
+              value: "{{ digital_energy_twin_matomo_oidc_issuer }}"
+            - name: MATOMO_OIDC_CLIENT_ID
+              value: "{{ digital_energy_twin_matomo_oidc_client_id }}"
+            - name: MATOMO_OIDC_CLIENT_SECRET_FILE
+              value: /run/secrets/matomo-oidc/client-secret
+{% if digital_energy_twin_matomo_keycloak_internal_url %}
+            # Token and userinfo via the internal service; Keycloak must still
+            # issue tokens for MATOMO_OIDC_ISSUER (its configured hostname).
+            - name: MATOMO_OIDC_BACKCHANNEL_URL
+              value: "{{ digital_energy_twin_matomo_keycloak_internal_url | regex_replace('/+$', '') }}/realms/{{ inv_access.tenant.realm_name }}"
+{% endif %}
           ports:
             - containerPort: 80
           startupProbe:
@@ -91,6 +106,9 @@ spec:
               mountPath: /var/lock/apache2
             - name: tmp
               mountPath: /tmp
+            - name: oidc
+              mountPath: /run/secrets/matomo-oidc
+              readOnly: true
       volumes:
         - name: data
           persistentVolumeClaim:
@@ -101,3 +119,10 @@ spec:
           emptyDir: {}
         - name: tmp
           emptyDir: {}
+        - name: oidc
+          secret:
+            secretName: "{{ digital_energy_twin_matomo_oidc_secret_name }}"
+            defaultMode: 0400
+            items:
+              - key: client-secret
+                path: client-secret

@@ -1,5 +1,6 @@
 """Offline Matomo checks; requires Jinja2 and PyYAML (Ansible dependencies)."""
 
+import hashlib
 import unittest
 from pathlib import Path
 
@@ -12,6 +13,8 @@ TASKS = yaml.safe_load((ROOT / "tasks/digital-energy-twin.yml").read_text())
 ENV = Environment(undefined=StrictUndefined)
 ENV.filters["bool"] = lambda value: str(value).lower() in ("true", "yes", "1", "on")
 ENV.filters["combine"] = lambda *dicts: {key: value for d in dicts for key, value in d.items()}
+ENV.filters["hash"] = lambda value, algorithm: hashlib.new(algorithm, value.encode()).hexdigest()
+ENV.filters["regex_replace"] = lambda value, pattern, replacement: __import__("re").sub(pattern, replacement, value)
 NAMES = {
     "digital_energy_twin_matomo_name": "digital-energy-twin-matomo",
     "digital_energy_twin_matomo_db_name": "digital-energy-twin-matomo-db",
@@ -25,6 +28,12 @@ NAMES = {
     "digital_energy_twin_matomo_service_name": "matomo-det-example-test",
     "digital_energy_twin_matomo_backup_schedule": "30 2 * * *",
     "digital_energy_twin_matomo_backup_keep_days": 14,
+    "digital_energy_twin_matomo_oidc_secret_name": "digital-energy-twin-matomo-oidc",
+    "digital_energy_twin_matomo_oidc_client_id": "matomo",
+    "digital_energy_twin_matomo_oidc_issuer": "https://idm.example.test/realms/dez",
+    "digital_energy_twin_matomo_keycloak_internal_url": "",
+    "digital_energy_twin_matomo_client_secret": {"json": {"value": "secret"}},
+    "inv_access": {"tenant": {"realm_name": "dez"}},
 }
 
 
@@ -71,11 +80,25 @@ class MatomoTests(unittest.TestCase):
         self.assertEqual(env["MATOMO_DATABASE_PASSWORD"]["valueFrom"]["secretKeyRef"],
                          {"name": "digital-energy-twin-matomo-db", "key": "password"})
         self.assertEqual(container["ports"], [{"containerPort": 80}])
+        self.assertEqual(env["MATOMO_OIDC_ISSUER"]["value"], "https://idm.example.test/realms/dez")
+        self.assertEqual(env["MATOMO_OIDC_CLIENT_ID"]["value"], "matomo")
+        self.assertEqual(env["MATOMO_OIDC_CLIENT_SECRET_FILE"]["value"], "/run/secrets/matomo-oidc/client-secret")
+        self.assertNotIn("MATOMO_OIDC_BACKCHANNEL_URL", env)
+        self.assertNotIn("MATOMO_OIDC_CLIENT_SECRET", env)
         self.assertEqual(container["securityContext"]["capabilities"]["drop"], ["ALL"])
         mounts = {mount["mountPath"]: mount["name"] for mount in container["volumeMounts"]}
         self.assertEqual(mounts["/var/www/html"], "data")
+        self.assertEqual(mounts["/run/secrets/matomo-oidc"], "oidc")
         volumes = {volume["name"]: volume for volume in spec["template"]["spec"]["volumes"]}
         self.assertEqual(volumes["data"]["persistentVolumeClaim"]["claimName"], "digital-energy-twin-matomo-data")
+        self.assertEqual(volumes["oidc"]["secret"]["secretName"], "digital-energy-twin-matomo-oidc")
+        annotations = spec["template"]["metadata"]["annotations"]
+        self.assertEqual(annotations["checksum/oidc-client-secret"], hashlib.sha256(b"secret").hexdigest())
+
+    def test_backchannel_url_points_to_the_realm_of_the_internal_keycloak(self):
+        deployment = render("matomo_deploy", digital_energy_twin_matomo_keycloak_internal_url="http://keycloak.idm.svc:8080/")
+        env = {item["name"]: item for item in deployment["spec"]["template"]["spec"]["containers"][0]["env"]}
+        self.assertEqual(env["MATOMO_OIDC_BACKCHANNEL_URL"]["value"], "http://keycloak.idm.svc:8080/realms/dez")
 
     def test_only_matomo_and_its_backup_reach_the_database(self):
         policy = render("matomo_db_netpol")
@@ -113,6 +136,45 @@ class MatomoTests(unittest.TestCase):
                          "config.ini.php", '-mtime +"$KEEP_DAYS"'):
             self.assertIn(expected, script)
         self.assertEqual(pod["initContainers"][0]["securityContext"]["capabilities"]["add"], ["CHOWN"])
+
+    def test_keycloak_client_is_confidential_standard_flow_only(self):
+        facts = task("Set Matomo Keycloak facts")["ansible.builtin.set_fact"]
+        settings = facts["digital_energy_twin_matomo_client_settings"]
+        self.assertEqual((settings["publicClient"], settings["standardFlowEnabled"], settings["implicitFlowEnabled"],
+                          settings["directAccessGrantsEnabled"], settings["serviceAccountsEnabled"]),
+                         (False, True, False, False, False))
+        host = {"digital_energy_twin_matomo_host": "matomo.det.example.test"}
+        self.assertEqual([ENV.from_string(uri).render(host) for uri in settings["redirectUris"]],
+                         ["https://matomo.det.example.test/index.php?module=LoginOIDC&action=callback&provider=oidc"])
+        self.assertEqual(ENV.from_string(settings["attributes"]["post.logout.redirect.uris"]).render(host),
+                         "https://matomo.det.example.test/*")
+        roles = {"digital_energy_twin_oidc_client_id": "digital-energy-twin",
+                 "digital_energy_twin_matomo_viewer_role": "matomoViewer",
+                 "digital_energy_twin_matomo_admin_role": "matomoAdmin"}
+        conditions_ = [ENV.from_string(item["role"]).render(roles) for item in facts["digital_energy_twin_matomo_role_conditions"]]
+        self.assertEqual(conditions_, ["digital-energy-twin.matomoViewer", "digital-energy-twin.matomoAdmin"])
+        self.assertEqual(ENV.from_string(facts["digital_energy_twin_matomo_deny_message"]).render(roles),
+                         "Kein Zugriff auf Matomo: Ihrem Konto fehlt die Rolle matomoViewer oder matomoAdmin.")
+        defaults = task("Set Matomo defaults")["ansible.builtin.set_fact"]
+        self.assertEqual(defaults["digital_energy_twin_matomo_viewer_role"], "matomoViewer")
+        self.assertEqual(defaults["digital_energy_twin_matomo_admin_role"], "matomoAdmin")
+
+    def test_role_gate_is_always_checked_with_temporary_users(self):
+        check = task("Check the Matomo role gate with temporary users")
+        self.assertIn("digital_energy_twin_matomo_enabled", conditions(check))
+        names = [entry["name"].split(": ", 1)[1] for entry in check["block"]]
+        self.assertIn("Validate that Keycloak denies Matomo without a Matomo role", names)
+        self.assertIn("Validate that Keycloak admits Matomo with a Matomo role", names)
+        self.assertEqual([entry["name"].split(": ", 1)[1] for entry in check["always"]],
+                         ["Delete temporary Matomo check users"])
+
+    def test_deployment_waits_for_the_keycloak_client_secret(self):
+        names = [entry["name"] for entry in TASKS]
+        self.assertLess(names.index("Digital Energy Twin: Store Matomo OIDC client secret in addon namespace"),
+                        names.index("Digital Energy Twin: Ensure Matomo deployment"))
+        # A Matomo problem must not stop the main app's routes.
+        self.assertLess(names.index("Digital Energy Twin: Upsert backend admin-api route (OIDC protected)"),
+                        names.index("Digital Energy Twin: Set Matomo Keycloak facts"))
 
     def test_backup_job_starts_only_after_installation(self):
         self.assertIn("digital_energy_twin_matomo_installed", conditions(task("Ensure Matomo backup job")))
