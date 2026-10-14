@@ -40,6 +40,15 @@
       "notes": "Backend image used for database migration and application runtime; its verified, digest-bound SBOM is maintained as a modular child BOM.",
       "license": "LGPL-3.0-or-later",
       "releaseRepository": "csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_MonoRepo"
+    },
+    {
+      "sourceKey": "matomo",
+      "sbomPath": "sboms/matomo.cdx.json",
+      "relationship": "deployed application container",
+      "notes": "Matomo web analytics image with the LoginOIDC and NoPasswordReset plugins, deployed when inv_addons.digital-energy-twin.matomo.enable is true; its verified, digest-bound SBOM is maintained as a modular child BOM. Releases up to v1.7.3 contain no Matomo image.",
+      "license": "GPL-3.0-or-later",
+      "releaseRepository": "csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_MonoRepo",
+      "optional": true
     }
   ],
   "additionalComponents": [

@@ -15,7 +15,10 @@ COMPONENTS = {
     "admin": ("adminfrontend", "base-frontend"),
     "public": ("frontend", "frontend"),
     "backend": ("backend", "rg-dez-backend"),
+    "matomo": ("matomo", "regensburg-web-matomo"),
 }
+# Images added after the first releases; releases up to v1.7.3 have no matomo.
+OPTIONAL_COMPONENTS = {"matomo"}
 
 
 def require(condition: bool, message: str) -> None:
@@ -53,7 +56,13 @@ def prepare_release(source: Path, release_file: Path, selection_file: Path,
     files = manifest["sboms"]["files"]
     selected_images = selection.get("images", {})
     verified_sboms: dict[str, bytes] = {}
+    skipped: list[str] = []
     for destination_name, (component, package_name) in COMPONENTS.items():
+        if component in OPTIONAL_COMPONENTS and component not in manifest:
+            require(component not in selected_images and component not in manifest["sboms"]["images"],
+                    f"Validated selection differs for {component}")
+            skipped.append(destination_name)
+            continue
         image = manifest[component]
         reference = f"{image['image']}@{image['digest']}"
         require(selected_images.get(component) == reference,
@@ -81,6 +90,8 @@ def prepare_release(source: Path, release_file: Path, selection_file: Path,
         target = destination / "sboms" / f"{destination_name}.cdx.json"
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(content)
+    for destination_name in skipped:
+        (destination / "sboms" / f"{destination_name}.cdx.json").unlink(missing_ok=True)
 
     selected = {"digital_energy_twin_application_release": {
         "repository": APPLICATION_REPOSITORY, "tag": tag, "manifest": manifest}}

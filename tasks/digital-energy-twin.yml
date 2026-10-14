@@ -137,6 +137,8 @@
       - digital_energy_twin_application_release.manifest.adminfrontend.digest is match('^sha256:[a-f0-9]{64}$')
       - digital_energy_twin_application_release.manifest.frontend.digest is match('^sha256:[a-f0-9]{64}$')
       - digital_energy_twin_application_release.manifest.backend.digest is match('^sha256:[a-f0-9]{64}$')
+      # Releases up to v1.7.3 have no matomo image.
+      - digital_energy_twin_application_release.manifest.matomo is not defined or digital_energy_twin_application_release.manifest.matomo.digest is match('^sha256:[a-f0-9]{64}$')
     fail_msg: "The selected monorepo release is incomplete; prepare it from a completed release manifest."
   when: digital_energy_twin_application_release is defined
 
@@ -154,6 +156,7 @@
     digital_energy_twin_admin_image: "{{ digital_energy_twin_application_release.manifest.adminfrontend.image ~ '@' ~ digital_energy_twin_application_release.manifest.adminfrontend.digest if digital_energy_twin_application_release is defined else software['digital-energy-twin'].admin.registry ~ '/' ~ software['digital-energy-twin'].admin.repository ~ ':' ~ software['digital-energy-twin'].admin.tag }}"
     digital_energy_twin_public_image: "{{ digital_energy_twin_application_release.manifest.frontend.image ~ '@' ~ digital_energy_twin_application_release.manifest.frontend.digest if digital_energy_twin_application_release is defined else software['digital-energy-twin'].public.registry ~ '/' ~ software['digital-energy-twin'].public.repository ~ ':' ~ software['digital-energy-twin'].public.tag }}"
     digital_energy_twin_backend_image: "{{ digital_energy_twin_application_release.manifest.backend.image ~ '@' ~ digital_energy_twin_application_release.manifest.backend.digest if digital_energy_twin_application_release is defined else software['digital-energy-twin'].backend.registry ~ '/' ~ software['digital-energy-twin'].backend.repository ~ ':' ~ software['digital-energy-twin'].backend.tag }}"
+    digital_energy_twin_matomo_image: "{{ digital_energy_twin_application_release.manifest.matomo.image ~ '@' ~ digital_energy_twin_application_release.manifest.matomo.digest if digital_energy_twin_application_release is defined and digital_energy_twin_application_release.manifest.matomo is defined else '' }}"
     digital_energy_twin_database_secret_name: "digital-energy-twin-database"
     digital_energy_twin_smtp_secret_name: "digital-energy-twin-smtp"
     digital_energy_twin_feedback_mail_to: "{{ digital_energy_twin.feedback_mail_to | default('') | trim }}"
