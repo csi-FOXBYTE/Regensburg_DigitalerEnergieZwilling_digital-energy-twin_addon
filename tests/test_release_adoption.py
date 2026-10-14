@@ -70,7 +70,7 @@ class ReleaseAdoptionTests(unittest.TestCase):
 
     def adopt(self):
         return prepare_release(self.source, self.release_file, self.selection_file,
-                               "v1.8.0", self.destination)
+                               "v1.7.3", self.destination)
 
     def test_adopts_one_manifest_and_pins_all_images_by_digest(self):
         self.adopt()
@@ -79,7 +79,8 @@ class ReleaseAdoptionTests(unittest.TestCase):
         self.assertEqual(selected["manifest"], self.manifest)
         self.assertFalse((self.destination / "vars/software_references.yml").exists())
         config = json.loads((self.destination / "sbom.config.json").read_text())
-        self.assertEqual(config["rootComponent"]["version"], "1.8.0")
+        self.assertEqual(config["rootComponent"]["version"], "1.7.3")
+        self.assertEqual(config["releaseTag"], "v1.7.3")
         self.assertTrue(all(component["releaseRepository"] == selected["repository"]
                             for component in config["imageComponents"]))
         for destination_name, (component, _) in COMPONENTS.items():
@@ -114,6 +115,13 @@ class ReleaseAdoptionTests(unittest.TestCase):
         self.selection_file.write_text(json.dumps(selection))
         with self.assertRaisesRegex(ValueError, "Validated selection differs for backend"):
             self.adopt()
+        self.assertTrue((self.destination / "vars/software_references.yml").exists())
+        self.assertFalse((self.destination / "vars/application_release.json").exists())
+
+    def test_rejects_addon_tag_that_differs_from_monorepo_release(self):
+        with self.assertRaisesRegex(ValueError, "Addon tag must match the monorepo release tag"):
+            prepare_release(self.source, self.release_file, self.selection_file,
+                            "v1.8.0", self.destination)
         self.assertTrue((self.destination / "vars/software_references.yml").exists())
         self.assertFalse((self.destination / "vars/application_release.json").exists())
 

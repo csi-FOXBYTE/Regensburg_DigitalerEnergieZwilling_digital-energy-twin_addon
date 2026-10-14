@@ -44,9 +44,9 @@ inv_addons:
 By default, the addon works without any `software` section in your deployment inventory.
 The current checked-in selection remains in
 [vars/software_references.yml](vars/software_references.yml) until the monorepo's
-v1.7.3 release is published and adopted. The **Prepare application release** workflow
-then replaces that file with `vars/application_release.json`, containing the exact
-validated [monorepo release manifest](https://github.com/csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_MonoRepo).
+v1.7.3 release is published and adopted. The **Release addon from application
+release** workflow then replaces that file with `vars/application_release.json`,
+containing the exact validated [monorepo release manifest](https://github.com/csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_MonoRepo).
 Deployment reads all three `image@sha256:...` references from that one manifest and
 sets `APP_VERSION` on both static frontends from its `appVersion`.
 
@@ -487,20 +487,19 @@ Update `sbom.config.json` whenever the addon's control-plane or platform
 integrations change; the generator fails if a new image key has no SBOM entry.
 Set `SBOM_REQUIRE_CHILD_BOMS=1` to require all three verified child documents.
 
-The manually triggered **Prepare application release** workflow accepts an exact
-completed monorepo release tag and an optional addon release tag. Current monorepo
-releases are prereleases, so select **Allow a completed application prerelease**
-when preparing v1.7.3. If the addon tag is empty, the workflow suggests the next
-minor version from existing addon tags; the addon and application versions are
-independent. The workflow checks out the selected monorepo tag, verifies that its
-manifest matches the completed GitHub release journal, and checks the release
-SBOM hashes and image identities. It records the full manifest and digest-pinned
-images, bundles the matching child SBOMs, updates the addon version, and opens a
-draft pull request for review. It never merges the pull request or creates the
-addon Git tag. Review the completed monorepo release and tag again before merging;
-after merging, create the selected addon tag through the normal release process.
+The manually triggered **Release addon from application release** workflow accepts
+an exact completed monorepo release tag. Current monorepo releases are prereleases,
+so select **Allow a completed application prerelease** when releasing v1.7.3.
+The workflow checks out the selected monorepo tag, verifies that its manifest
+matches the completed GitHub release journal, and checks the release SBOM hashes
+and image identities. It records the full manifest and digest-pinned images,
+bundles the matching child SBOMs, and sets the addon version to the same tag as
+the monorepo release. It commits these files directly to `main`, then creates the
+matching addon Git tag and GitHub Release. The GitHub Release is marked as a
+prerelease when the selected monorepo release is a prerelease. The workflow
+reuses the committed SBOM on a rerun when the selected release files are unchanged.
 
-The repository or organization must allow `GITHUB_TOKEN` to create pull
-requests. `.copier-answers.yml` is deliberately not changed by the release
+The repository must allow `GITHUB_TOKEN` to push to `main` and create tags and
+releases. `.copier-answers.yml` is deliberately not changed by the release
 workflow: its `_commit` value tracks the Civitas addon-template revision rather
 than the addon release version.

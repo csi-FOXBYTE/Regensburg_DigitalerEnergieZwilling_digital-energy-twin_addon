@@ -42,6 +42,7 @@ def prepare_release(source: Path, release_file: Path, selection_file: Path,
     release = read_json(release_file)
     selection = read_json(selection_file)
     tag = f"v{manifest['appVersion']}"
+    require(addon_tag == tag, "Addon tag must match the monorepo release tag")
     require(release.get("tag_name") == tag and not release.get("draft"),
             "The selected GitHub release must be completed and match the tagged manifest")
     require(selection.get("appVersion") == manifest["appVersion"]

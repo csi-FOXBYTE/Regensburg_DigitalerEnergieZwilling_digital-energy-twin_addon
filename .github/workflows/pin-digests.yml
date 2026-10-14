@@ -1,4 +1,4 @@
-name: Prepare application release
+name: Release addon from application release
 
 on:
   workflow_dispatch:
@@ -12,22 +12,21 @@ on:
         required: true
         default: false
         type: boolean
-      release_tag:
-        description: "Addon release tag (leave empty to use the next minor version)"
-        required: false
-        type: string
-
 permissions:
   contents: write
-  pull-requests: write
+
+concurrency:
+  group: addon-release-main
+  cancel-in-progress: false
 
 jobs:
-  prepare-release:
+  release-addon:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout addon
         uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
 
       - name: Validate requested application tag
@@ -53,36 +52,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .local/application-source/.node-version
-
-      - name: Resolve addon release tag
-        id: release
-        env:
-          REQUESTED_TAG: ${{ inputs.release_tag }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          latest_version=$(git tag --list \
-            | sed -nE 's/^v?([0-9]+\.[0-9]+\.[0-9]+)$/\1/p' \
-            | sort -V \
-            | tail -n 1)
-
-          if [[ -z "$latest_version" ]]; then
-            suggested_tag="v0.1.0"
-          else
-            IFS=. read -r major minor _patch <<< "$latest_version"
-            suggested_tag="v${major}.$((minor + 1)).0"
-          fi
-
-          release_tag="${REQUESTED_TAG:-$suggested_tag}"
-          if [[ ! "$release_tag" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "release_tag must be a semantic version such as v1.8.0" >&2
-            exit 1
-          fi
-          {
-            echo "tag=$release_tag"
-            echo "suggested_tag=$suggested_tag"
-          } >> "$GITHUB_OUTPUT"
 
       - name: Fetch and validate the completed application release
         id: application
@@ -117,14 +86,11 @@ jobs:
           selected = json.loads(Path('.local/application-release/selection.json').read_text())
           with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
               output.write(f"tag=v{selected['appVersion']}\n")
-              output.write(f"version={selected['appVersion']}\n")
-              for component in ('adminfrontend', 'frontend', 'backend'):
-                  output.write(f"{component}_image={selected['images'][component]}\n")
           PY
 
       - name: Record the manifest selection and bundled application SBOMs
         env:
-          ADDON_TAG: ${{ steps.release.outputs.tag }}
+          ADDON_TAG: ${{ steps.application.outputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
@@ -135,35 +101,64 @@ jobs:
             "$ADDON_TAG" .
 
       - name: Generate and validate addon SBOM
+        env:
+          ADDON_TAG: ${{ steps.application.outputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
+          if [[ -f vars/application_release.json && -f SBOM.cdx.json && -f SBOM.csv ]] \
+            && [[ -z "$(git status --porcelain -- sbom.config.json vars/application_release.json vars/software_references.yml sboms)" ]] \
+            && [[ "$(git log -1 --format=%s)" == "chore: release addon $ADDON_TAG" ]]; then
+            echo "Selected release and its generated SBOM are already committed"
+            exit 0
+          fi
           python3 -m venv .sbom-env
           .sbom-env/bin/python -m pip install --requirement requirements-sbom.txt
           SBOM_REQUIRE_CHILD_BOMS=1 .sbom-env/bin/python scripts/generate_sbom.py
 
-      - name: Create review pull request
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          branch: prepare-release/${{ steps.release.outputs.tag }}
-          title: "chore: prepare addon release ${{ steps.release.outputs.tag }}"
-          body: |
-            Adopts the completed monorepo application release `${{ steps.application.outputs.tag }}`
-            for addon release `${{ steps.release.outputs.tag }}`. The selected manifest,
-            digest-pinned images, and matching child SBOMs are included for review.
+      - name: Commit release on main and push matching tag
+        env:
+          ADDON_TAG: ${{ steps.application.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A -- sbom.config.json vars/application_release.json \
+            vars/software_references.yml sboms SBOM.cdx.json SBOM.csv
 
-            | Component | Image |
-            |-----------|-------|
-            | admin | `${{ steps.application.outputs.adminfrontend_image }}` |
-            | public | `${{ steps.application.outputs.frontend_image }}` |
-            | backend | `${{ steps.application.outputs.backend_image }}` |
+          if git show-ref --verify --quiet "refs/tags/$ADDON_TAG"; then
+            if [[ "$(git rev-list -n 1 "$ADDON_TAG")" != "$(git rev-parse HEAD)" ]] \
+              || ! git diff --cached --quiet; then
+              echo "Addon tag $ADDON_TAG already exists for different release content" >&2
+              exit 1
+            fi
+          elif ! git diff --cached --quiet; then
+            git commit -m "chore: release addon $ADDON_TAG"
+            git push origin HEAD:main
+          fi
 
-            The pull request remains open for manual review. Merging it does not
-            create an addon Git tag or release. Check the selected monorepo release
-            and tag again before merging.
+          if ! git show-ref --verify --quiet "refs/tags/$ADDON_TAG"; then
+            git tag -a "$ADDON_TAG" -m "Release addon $ADDON_TAG"
+            git push origin "refs/tags/$ADDON_TAG"
+          fi
 
-            Suggested next minor addon tag: `${{ steps.release.outputs.suggested_tag }}`.
-          commit-message: "chore: prepare addon release ${{ steps.release.outputs.tag }}"
-          draft: true
-          delete-branch: true
+      - name: Publish matching GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ADDON_TAG: ${{ steps.application.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$ADDON_TAG" >/dev/null 2>&1; then
+            echo "GitHub release $ADDON_TAG already exists"
+            exit 0
+          fi
+
+          options=()
+          if [[ "$(python3 -c 'import json; print(str(json.load(open(".local/application-release/release.json")).get("prerelease", False)).lower())')" == true ]]; then
+            options+=(--prerelease)
+          fi
+          gh release create "$ADDON_TAG" --verify-tag --title "$ADDON_TAG" \
+            --notes "Adopts completed monorepo application release $ADDON_TAG with digest-pinned images and matching SBOMs." \
+            "${options[@]}"
