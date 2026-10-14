@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: "{{ digital_energy_twin_matomo_pvc.name }}"
+  labels:
+    app: "{{ digital_energy_twin_matomo_pvc.app }}"
+spec:
+  accessModes:
+    - ReadWriteOnce
+{% if digital_energy_twin_matomo_storage_class %}
+  storageClassName: "{{ digital_energy_twin_matomo_storage_class }}"
+{% endif %}
+  resources:
+    requests:
+      storage: "{{ digital_energy_twin_matomo_pvc.size }}"

@@ -25,6 +25,26 @@ all:
             tiles_url: "https://tiles.{{ DOMAIN }}"
             terrain_url: "https://terrain.{{ DOMAIN }}"
             address_database_url: "https://tiles.{{ DOMAIN }}/det-rg-addresses.sqlite"
+            # Optional Matomo web analytics with login via the platform Keycloak.
+            # Skipped while the selected release has no matomo image (up to v1.7.3).
+            # See "Matomo web analytics" in README.md before enabling it.
+            # matomo:
+            #   enable: true
+            #   host: "matomo.det.{{ DOMAIN }}"
+            #   # Until the web installer has run, only these networks reach Matomo.
+            #   installed: false
+            #   install_allowed_cidrs: ["192.0.2.10/32"]
+            #   # Proxies in front of APISIX whose X-Forwarded-For is trusted.
+            #   install_trusted_proxies: []
+            #   storage_class: ""  # Empty: the cluster's default StorageClass.
+            #   data_size: "5Gi"
+            #   db_size: "10Gi"
+            #   backup:
+            #     enable: true
+            #     target: pvc
+            #     schedule: "30 2 * * *"
+            #     keep_days: 14
+            #     size: "10Gi"
             # Optional. Configures the backend mail transport when supplied.
             # feedback_mail_to: "feedback@{{ DOMAIN }}"
             # Mode 1 (default): omit db to create digital_energy_twin and its

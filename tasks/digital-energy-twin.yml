@@ -128,6 +128,27 @@
       Define inv_addons['digital-energy-twin'].db to use another database server.
   when: digital_energy_twin_db_mode == 'central'
 
+- name: "Digital Energy Twin: Validate Matomo config"
+  ansible.builtin.assert:
+    that:
+      - digital_energy_twin.matomo is mapping
+      - digital_energy_twin.matomo.host is not defined or digital_energy_twin.matomo.host | length > 0
+      - digital_energy_twin.matomo.install_allowed_cidrs | default([]) is sequence
+      - digital_energy_twin.matomo.install_allowed_cidrs | default([]) is not string
+      - digital_energy_twin.matomo.install_allowed_cidrs | default([]) | reject('match', '^[0-9a-fA-F:.]+/[0-9]{1,3}$') | list | length == 0
+      - digital_energy_twin.matomo.install_trusted_proxies | default([]) is sequence
+      - digital_energy_twin.matomo.install_trusted_proxies | default([]) is not string
+      - digital_energy_twin.matomo.install_trusted_proxies | default([]) | reject('match', '^[0-9a-fA-F:.]+/[0-9]{1,3}$') | list | length == 0
+      - digital_energy_twin.matomo.backup | default({}) is mapping
+      - digital_energy_twin.matomo.backup.target | default('pvc') in ['pvc']
+      - digital_energy_twin.matomo.backup.keep_days | default(14) | int > 0
+    fail_msg: >-
+      inv_addons['digital-energy-twin'].matomo must be a mapping. install_allowed_cidrs
+      and install_trusted_proxies must be lists of CIDRs such as 192.0.2.10/32.
+      backup.target must be pvc (the only target so far) and backup.keep_days a
+      positive number of days.
+  when: digital_energy_twin.matomo is defined
+
 - name: "Digital Energy Twin: Validate selected application release"
   ansible.builtin.assert:
     that:
@@ -197,6 +218,49 @@
             Strict-Transport-Security: "max-age=31536000; includeSubDomains"
             Content-Security-Policy: "default-src 'self'; frame-ancestors 'none'; base-uri 'self'"
 
+- name: "Digital Energy Twin: Load Matomo config"
+  ansible.builtin.set_fact:
+    digital_energy_twin_matomo_config: "{{ digital_energy_twin.matomo | default({}) }}"
+
+- name: "Digital Energy Twin: Set Matomo defaults"
+  ansible.builtin.set_fact:
+    digital_energy_twin_matomo_requested: "{{ digital_energy_twin_enabled and (digital_energy_twin_matomo_config.enable | default(false) | bool) }}"
+    # Releases up to v1.7.3 have no matomo image; Matomo is then skipped.
+    digital_energy_twin_matomo_enabled: >-
+      {{ digital_energy_twin_enabled and (digital_energy_twin_matomo_config.enable | default(false) | bool)
+      and digital_energy_twin_matomo_image | length > 0 }}
+    digital_energy_twin_matomo_host: "{{ digital_energy_twin_matomo_config.host | default('matomo.det.' ~ DOMAIN) }}"
+    digital_energy_twin_matomo_installed: "{{ digital_energy_twin_matomo_config.installed | default(false) | bool }}"
+    digital_energy_twin_matomo_install_allowed_cidrs: "{{ digital_energy_twin_matomo_config.install_allowed_cidrs | default([]) }}"
+    digital_energy_twin_matomo_install_trusted_proxies: "{{ digital_energy_twin_matomo_config.install_trusted_proxies | default([]) }}"
+    digital_energy_twin_matomo_name: "digital-energy-twin-matomo"
+    digital_energy_twin_matomo_data_pvc_name: "digital-energy-twin-matomo-data"
+    digital_energy_twin_matomo_data_size: "{{ digital_energy_twin_matomo_config.data_size | default('5Gi') }}"
+    digital_energy_twin_matomo_storage_class: "{{ digital_energy_twin_matomo_config.storage_class | default('') }}"
+    digital_energy_twin_matomo_db_name: "digital-energy-twin-matomo-db"
+    digital_energy_twin_matomo_db_image: >-
+      {{ digital_energy_twin_matomo_config.db_image
+      | default('docker.io/library/mariadb:11.8.9@sha256:6422478cb8e159f080fb1d8ccf65101e26fe51385787fde7d16c3b165a331f15') }}
+    digital_energy_twin_matomo_db_size: "{{ digital_energy_twin_matomo_config.db_size | default('10Gi') }}"
+    digital_energy_twin_matomo_db_secret_name: "digital-energy-twin-matomo-db"
+    digital_energy_twin_matomo_db_database: "matomo"
+    digital_energy_twin_matomo_db_user: "matomo"
+    digital_energy_twin_matomo_backup_name: "digital-energy-twin-matomo-backup"
+    # Civitas Core backs up only PostgreSQL; the addon backs up Matomo itself.
+    digital_energy_twin_matomo_backup_enabled: "{{ (digital_energy_twin_matomo_config.backup | default({})).enable | default(true) | bool }}"
+    digital_energy_twin_matomo_backup_target: "{{ (digital_energy_twin_matomo_config.backup | default({})).target | default('pvc') }}"
+    digital_energy_twin_matomo_backup_schedule: "{{ (digital_energy_twin_matomo_config.backup | default({})).schedule | default('30 2 * * *') }}"
+    digital_energy_twin_matomo_backup_keep_days: "{{ (digital_energy_twin_matomo_config.backup | default({})).keep_days | default(14) | int }}"
+    digital_energy_twin_matomo_backup_size: "{{ (digital_energy_twin_matomo_config.backup | default({})).size | default('10Gi') }}"
+
+- name: "Digital Energy Twin: Report skipped Matomo"
+  ansible.builtin.debug:
+    msg: >-
+      Matomo is enabled, but the selected application release
+      {{ digital_energy_twin_application_release.tag | default('(tag-based selection)') }}
+      contains no matomo image. Matomo is skipped until a release with Matomo is adopted.
+  when: digital_energy_twin_matomo_requested and not digital_energy_twin_matomo_enabled
+
 - name: "Digital Energy Twin: Validate feedback mail transport"
   ansible.builtin.assert:
     that:
@@ -225,6 +289,7 @@
     digital_energy_twin_admin_service_name: "{{ digital_energy_twin_admin_direct_host | replace('.', '-') }}"
     digital_energy_twin_public_service_name: "{{ digital_energy_twin_public_direct_host | replace('.', '-') }}"
     digital_energy_twin_backend_service_name: "{{ digital_energy_twin_backend_direct_host | replace('.', '-') }}"
+    digital_energy_twin_matomo_service_name: "{{ digital_energy_twin_matomo_host | replace('.', '-') }}"
 
 - name: "Digital Energy Twin: Set routing hosts"
   ansible.builtin.set_fact:
@@ -236,6 +301,13 @@
       - name: digital-energy-twin-backend-host
         hostname: "{{ digital_energy_twin_backend_direct_host }}"
 
+- name: "Digital Energy Twin: Add Matomo routing host"
+  ansible.builtin.set_fact:
+    digital_energy_twin_routing_hosts: >-
+      {{ digital_energy_twin_routing_hosts
+      + [{'name': 'digital-energy-twin-matomo-host', 'hostname': digital_energy_twin_matomo_host}] }}
+  when: digital_energy_twin_matomo_enabled
+
 - name: "Digital Energy Twin: Resolve upstreams"
   set_fact:
     digital_energy_twin_admin_upstream_host: "{{ digital_energy_twin_admin_service_name }}.{{ digital_energy_twin_namespace }}.svc.cluster.local"
@@ -243,6 +315,7 @@
     digital_energy_twin_public_upstream_host: "{{ digital_energy_twin_public_service_name }}.{{ digital_energy_twin_namespace }}.svc.cluster.local"
     digital_energy_twin_public_upstream_port: "80"
     digital_energy_twin_backend_upstream_host: "{{ digital_energy_twin_backend_service_name }}.{{ digital_energy_twin_namespace }}.svc.cluster.local"
+    digital_energy_twin_matomo_upstream_host: "{{ digital_energy_twin_matomo_service_name }}.{{ digital_energy_twin_namespace }}.svc.cluster.local"
   when: digital_energy_twin_enabled
 
 - name: "Digital Energy Twin: Set default facts for K8S"
@@ -524,6 +597,127 @@
     namespace: "{{ k8s_namespace }}"
     definition: "{{ lookup('template', addon_dir + 'templates/digital_energy_twin_backend_svc.yaml.j2') | from_yaml }}"
   when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Get Matomo database credentials secret"
+  kubernetes.core.k8s_info:
+    kind: Secret
+    namespace: "{{ k8s_namespace }}"
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    name: "{{ digital_energy_twin_matomo_db_secret_name }}"
+  register: digital_energy_twin_matomo_db_secret
+  when: digital_energy_twin_matomo_enabled
+  no_log: true
+
+# MariaDB keeps the password from its first start, so it is generated only once.
+- name: "Digital Energy Twin: Create Matomo database credentials secret once"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: "{{ digital_energy_twin_matomo_db_secret_name }}"
+      type: Opaque
+      stringData:
+        password: "{{ lookup('ansible.builtin.password', '/dev/null', length=40, chars=['ascii_letters', 'digits']) }}"
+        root-password: "{{ lookup('ansible.builtin.password', '/dev/null', length=40, chars=['ascii_letters', 'digits']) }}"
+  when: digital_energy_twin_matomo_enabled and digital_energy_twin_matomo_db_secret.resources | length == 0
+  no_log: true
+
+- name: "Digital Energy Twin: Ensure Matomo volumes"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition: "{{ lookup('template', addon_dir + 'templates/digital_energy_twin_matomo_pvc.yaml.j2') | from_yaml }}"
+  loop:
+    - name: "{{ digital_energy_twin_matomo_db_name }}-data"
+      app: "{{ digital_energy_twin_matomo_db_name }}"
+      size: "{{ digital_energy_twin_matomo_db_size }}"
+    - name: "{{ digital_energy_twin_matomo_data_pvc_name }}"
+      app: "{{ digital_energy_twin_matomo_name }}"
+      size: "{{ digital_energy_twin_matomo_data_size }}"
+  loop_control:
+    loop_var: digital_energy_twin_matomo_pvc
+    label: "{{ digital_energy_twin_matomo_pvc.name }}"
+  when: digital_energy_twin_matomo_enabled
+
+- name: "Digital Energy Twin: Ensure Matomo database"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition: "{{ lookup('template', addon_dir + 'templates/' + digital_energy_twin_matomo_db_template) | from_yaml }}"
+  loop:
+    - digital_energy_twin_matomo_db_svc.yaml.j2
+    - digital_energy_twin_matomo_db_netpol.yaml.j2
+    - digital_energy_twin_matomo_db_statefulset.yaml.j2
+  loop_control:
+    loop_var: digital_energy_twin_matomo_db_template
+  when: digital_energy_twin_matomo_enabled
+
+- name: "Digital Energy Twin: Ensure Matomo deployment"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition: "{{ lookup('template', addon_dir + 'templates/digital_energy_twin_matomo_deploy.yaml.j2') | from_yaml }}"
+  when: digital_energy_twin_matomo_enabled
+
+- name: "Digital Energy Twin: Ensure Matomo service"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition: "{{ lookup('template', addon_dir + 'templates/digital_energy_twin_matomo_svc.yaml.j2') | from_yaml }}"
+  when: digital_energy_twin_matomo_enabled
+
+- name: "Digital Energy Twin: Ensure Matomo backup volume"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition: "{{ lookup('template', addon_dir + 'templates/digital_energy_twin_matomo_pvc.yaml.j2') | from_yaml }}"
+  vars:
+    digital_energy_twin_matomo_pvc:
+      name: "{{ digital_energy_twin_matomo_backup_name }}"
+      app: "{{ digital_energy_twin_matomo_backup_name }}"
+      size: "{{ digital_energy_twin_matomo_backup_size }}"
+  when: digital_energy_twin_matomo_enabled and digital_energy_twin_matomo_backup_enabled and digital_energy_twin_matomo_backup_target == 'pvc'
+
+# Before the installation there is nothing to back up and every run would fail.
+- name: "Digital Energy Twin: Ensure Matomo backup job"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition: "{{ lookup('template', addon_dir + 'templates/digital_energy_twin_matomo_backup_cronjob.yaml.j2') | from_yaml }}"
+  when:
+    - digital_energy_twin_matomo_enabled
+    - digital_energy_twin_matomo_backup_enabled
+    - digital_energy_twin_matomo_backup_target == 'pvc'
+    - digital_energy_twin_matomo_installed
+
+- name: "Digital Energy Twin: Remove Matomo backup job when disabled"
+  kubernetes.core.k8s:
+    state: absent
+    api_version: batch/v1
+    kind: CronJob
+    name: "{{ digital_energy_twin_matomo_backup_name }}"
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+  when: digital_energy_twin_matomo_enabled and not (digital_energy_twin_matomo_backup_enabled and digital_energy_twin_matomo_installed)
 
 - name: "Digital Energy Twin: Ensure Ingress routing for addon hosts"
   kubernetes.core.k8s:
@@ -1298,3 +1492,77 @@
       - 200
       - 201
   when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Upsert APISIX upstream (matomo)"
+  ansible.builtin.uri:
+    method: PUT
+    url: "https://api-admin.{{ DOMAIN }}/apisix/admin/upstreams/digital-energy-twin-matomo-upstream"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    body_format: json
+    body:
+      name: "digital-energy-twin-matomo-upstream"
+      desc: "Matomo web analytics upstream"
+      type: "roundrobin"
+      scheme: "http"
+      nodes: "{{ { (digital_energy_twin_matomo_upstream_host ~ ':80'): 1 } }}"
+    headers:
+      Accept: application/json
+      X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
+    status_code:
+      - 200
+      - 201
+  when: digital_energy_twin_matomo_enabled
+
+# Until the web installer has run, anyone reaching it could become superuser.
+# The route then admits only install_allowed_cidrs (nobody if the list is empty).
+- name: "Digital Energy Twin: Upsert Matomo direct-host route"
+  ansible.builtin.uri:
+    method: PUT
+    url: "https://api-admin.{{ DOMAIN }}/apisix/admin/routes/digital-energy-twin-matomo-direct"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    body_format: json
+    body:
+      name: "digital-energy-twin-matomo-direct"
+      desc: "Matomo direct-host route (Matomo and Keycloak handle login)"
+      hosts:
+        - "{{ digital_energy_twin_matomo_host }}"
+      uri: "/*"
+      upstream_id: "digital-energy-twin-matomo-upstream"
+      status: 1
+      plugins: >-
+        {{ {} if digital_energy_twin_matomo_installed
+        else (digital_energy_twin_matomo_install_lock
+        | combine(digital_energy_twin_matomo_real_ip if digital_energy_twin_matomo_install_trusted_proxies | length > 0 else {}))
+        if digital_energy_twin_matomo_install_allowed_cidrs | length > 0
+        else digital_energy_twin_matomo_deny_all }}
+    headers:
+      Accept: application/json
+      X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
+    status_code:
+      - 200
+      - 201
+  vars:
+    digital_energy_twin_matomo_install_lock:
+      ip-restriction:
+        whitelist: "{{ digital_energy_twin_matomo_install_allowed_cidrs }}"
+        message: "Matomo is not installed yet; access is limited to matomo.install_allowed_cidrs."
+    # Behind another proxy APISIX sees the proxy's address; take the client from X-Forwarded-For.
+    digital_energy_twin_matomo_real_ip:
+      real-ip:
+        source: http_x_forwarded_for
+        trusted_addresses: "{{ digital_energy_twin_matomo_install_trusted_proxies }}"
+        recursive: true
+    digital_energy_twin_matomo_deny_all:
+      serverless-pre-function:
+        _meta:
+          disable: false
+        phase: rewrite
+        functions:
+          - |-
+            return function()
+              ngx.status = 403
+              ngx.header["Content-Type"] = "application/json"
+              ngx.say('{"message":"Matomo is not installed yet; set matomo.install_allowed_cidrs to install it"}')
+              return ngx.exit(403)
+            end
+  when: digital_energy_twin_matomo_enabled

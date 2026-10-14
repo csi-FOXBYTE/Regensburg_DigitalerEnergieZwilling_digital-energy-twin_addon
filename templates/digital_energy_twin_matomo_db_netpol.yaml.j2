@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: "{{ digital_energy_twin_matomo_db_name }}"
+  labels:
+    app: "{{ digital_energy_twin_matomo_db_name }}"
+spec:
+  podSelector:
+    matchLabels:
+      app: "{{ digital_energy_twin_matomo_db_name }}"
+  policyTypes:
+    - Ingress
+  ingress:
+    # Only Matomo and its backup job reach the database.
+    - from:
+        - podSelector:
+            matchLabels:
+              app: "{{ digital_energy_twin_matomo_name }}"
+        - podSelector:
+            matchLabels:
+              app: "{{ digital_energy_twin_matomo_backup_name }}"
+      ports:
+        - protocol: TCP
+          port: 3306

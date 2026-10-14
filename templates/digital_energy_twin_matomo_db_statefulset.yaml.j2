@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: "{{ digital_energy_twin_matomo_db_name }}"
+  labels:
+    app: "{{ digital_energy_twin_matomo_db_name }}"
+spec:
+  replicas: 1
+  serviceName: "{{ digital_energy_twin_matomo_db_name }}"
+  selector:
+    matchLabels:
+      app: "{{ digital_energy_twin_matomo_db_name }}"
+  template:
+    metadata:
+      labels:
+        app: "{{ digital_energy_twin_matomo_db_name }}"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: mariadb
+          image: "{{ digital_energy_twin_matomo_db_image }}"
+          args:
+            # Matomo's system check asks for at least 64 MB.
+            - --max-allowed-packet=64M
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: MARIADB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ digital_energy_twin_matomo_db_secret_name }}"
+                  key: root-password
+            - name: MARIADB_DATABASE
+              value: "{{ digital_energy_twin_matomo_db_database }}"
+            - name: MARIADB_USER
+              value: "{{ digital_energy_twin_matomo_db_user }}"
+            - name: MARIADB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ digital_energy_twin_matomo_db_secret_name }}"
+                  key: password
+          ports:
+            - name: mysql
+              containerPort: 3306
+          startupProbe:
+            exec:
+              command: ["healthcheck.sh", "--connect", "--innodb_initialized"]
+            failureThreshold: 60
+            periodSeconds: 5
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command: ["healthcheck.sh", "--connect", "--innodb_initialized"]
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["healthcheck.sh", "--connect"]
+            periodSeconds: 30
+            failureThreshold: 5
+            timeoutSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+            - name: run
+              mountPath: /run/mysqld
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        # A separate PVC instead of volumeClaimTemplates, so its size can grow later.
+        - name: data
+          persistentVolumeClaim:
+            claimName: "{{ digital_energy_twin_matomo_db_name }}-data"
+        - name: run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
