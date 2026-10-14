@@ -142,11 +142,16 @@
       - digital_energy_twin.matomo.backup | default({}) is mapping
       - digital_energy_twin.matomo.backup.target | default('pvc') in ['pvc']
       - digital_energy_twin.matomo.backup.keep_days | default(14) | int > 0
+      - not (digital_energy_twin.matomo.tracking_enabled | default(false) | bool) or (digital_energy_twin.matomo.installed | default(false) | bool)
+      - >-
+        not (digital_energy_twin.matomo.tracking_enabled | default(false) | bool)
+        or (digital_energy_twin.matomo.site_id | default('') | string) is match('^[1-9][0-9]*$')
     fail_msg: >-
       inv_addons['digital-energy-twin'].matomo must be a mapping. install_allowed_cidrs
       and install_trusted_proxies must be lists of CIDRs such as 192.0.2.10/32.
       backup.target must be pvc (the only target so far) and backup.keep_days a
-      positive number of days.
+      positive number of days. tracking_enabled needs installed: true and the
+      numeric site_id of the DEZ website in Matomo.
   when: digital_energy_twin.matomo is defined
 
 - name: "Digital Energy Twin: Validate selected application release"
@@ -253,6 +258,12 @@
     digital_energy_twin_matomo_viewer_role: "matomoViewer"
     digital_energy_twin_matomo_admin_role: "matomoAdmin"
     digital_energy_twin_matomo_flow_alias: "matomo browser"
+    # Switch on only once section 12 of the privacy notice is complete for this customer.
+    digital_energy_twin_matomo_tracking: >-
+      {{ digital_energy_twin_enabled and (digital_energy_twin_matomo_config.enable | default(false) | bool)
+      and digital_energy_twin_matomo_image | length > 0 and (digital_energy_twin_matomo_config.installed | default(false) | bool)
+      and (digital_energy_twin_matomo_config.tracking_enabled | default(false) | bool) }}
+    digital_energy_twin_matomo_site_id: "{{ digital_energy_twin_matomo_config.site_id | default('') | string }}"
     # Civitas Core backs up only PostgreSQL; the addon backs up Matomo itself.
     digital_energy_twin_matomo_backup_enabled: "{{ (digital_energy_twin_matomo_config.backup | default({})).enable | default(true) | bool }}"
     digital_energy_twin_matomo_backup_target: "{{ (digital_energy_twin_matomo_config.backup | default({})).target | default('pvc') }}"

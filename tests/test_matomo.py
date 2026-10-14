@@ -1,6 +1,7 @@
 """Offline Matomo checks; requires Jinja2 and PyYAML (Ansible dependencies)."""
 
 import hashlib
+import re
 import unittest
 from pathlib import Path
 
@@ -14,7 +15,8 @@ ENV = Environment(undefined=StrictUndefined)
 ENV.filters["bool"] = lambda value: str(value).lower() in ("true", "yes", "1", "on")
 ENV.filters["combine"] = lambda *dicts: {key: value for d in dicts for key, value in d.items()}
 ENV.filters["hash"] = lambda value, algorithm: hashlib.new(algorithm, value.encode()).hexdigest()
-ENV.filters["regex_replace"] = lambda value, pattern, replacement: __import__("re").sub(pattern, replacement, value)
+ENV.filters["regex_replace"] = lambda value, pattern, replacement: re.sub(pattern, replacement, value)
+ENV.tests["match"] = lambda value, pattern: re.match(pattern, value) is not None
 NAMES = {
     "digital_energy_twin_matomo_name": "digital-energy-twin-matomo",
     "digital_energy_twin_matomo_db_name": "digital-energy-twin-matomo-db",
@@ -175,6 +177,52 @@ class MatomoTests(unittest.TestCase):
         # A Matomo problem must not stop the main app's routes.
         self.assertLess(names.index("Digital Energy Twin: Upsert backend admin-api route (OIDC protected)"),
                         names.index("Digital Energy Twin: Set Matomo Keycloak facts"))
+
+    def test_backend_tracking_stays_off_until_switched_on_after_installation(self):
+        tracking = task("Set Matomo defaults")["ansible.builtin.set_fact"]["digital_energy_twin_matomo_tracking"]
+        image = NAMES["digital_energy_twin_matomo_image"]
+        for config, matomo_image, expected in (
+            ({"enable": True, "installed": True}, image, False),
+            ({"enable": True, "installed": False, "tracking_enabled": True}, image, False),
+            ({"enable": True, "installed": True, "tracking_enabled": True}, "", False),
+            ({"enable": False, "installed": True, "tracking_enabled": True}, image, False),
+            ({"enable": True, "installed": True, "tracking_enabled": True}, image, True),
+        ):
+            with self.subTest(config=config, image=bool(matomo_image)):
+                result = ENV.from_string(tracking).render(
+                    digital_energy_twin_enabled=True, digital_energy_twin_matomo_image=matomo_image,
+                    digital_energy_twin_matomo_config=config)
+                self.assertEqual(result.strip(), str(expected))
+        validation = task("Validate Matomo config")["ansible.builtin.assert"]["that"]
+        for matomo, valid in (
+            ({"tracking_enabled": True, "installed": True, "site_id": 3}, True),
+            ({"tracking_enabled": True, "installed": True}, False),
+            ({"tracking_enabled": True, "site_id": 3}, False),
+            ({"site_id": "x"}, True),
+        ):
+            with self.subTest(matomo=matomo):
+                checks = [condition for condition in validation if "tracking_enabled" in condition]
+                result = all(ENV.compile_expression(condition)(digital_energy_twin={"matomo": matomo})
+                             for condition in checks)
+                self.assertEqual(result, valid)
+
+        backend = (ROOT / "templates/digital_energy_twin_backend_deploy.yaml.j2").read_text()
+        context = {"digital_energy_twin_backend_image": "backend@sha256:" + "b" * 64,
+                   "digital_energy_twin_database_secret_name": "db", "digital_energy_twin_backend_port": 5000,
+                   "digital_energy_twin_feedback_mail_to": "", "digital_energy_twin_tiles_url": "t",
+                   "digital_energy_twin_terrain_url": "t", "digital_energy_twin_address_database_url": "a",
+                   "digital_energy_twin_backend_direct_host": "api", "digital_energy_twin_public_direct_host": "det",
+                   "digital_energy_twin_admin_direct_host": "admin",
+                   "inv_access": {"platform": {"hostname": "https://idm"}, "tenant": {"realm_name": "dez"}},
+                   "digital_energy_twin_matomo_host": "matomo.det.example.test", "digital_energy_twin_matomo_site_id": "3"}
+        for tracking_on, expected in ((False, {}), (True, {"MATOMO_URL": "https://matomo.det.example.test/matomo.php",
+                                                           "MATOMO_SITE_ID": "3"})):
+            with self.subTest(tracking=tracking_on):
+                deployment = yaml.safe_load(ENV.from_string(backend).render(
+                    context, digital_energy_twin_matomo_tracking=tracking_on))
+                env = {item["name"]: item.get("value") for item in
+                       deployment["spec"]["template"]["spec"]["containers"][0]["env"]}
+                self.assertEqual({key: value for key, value in env.items() if key.startswith("MATOMO")}, expected)
 
     def test_backup_job_starts_only_after_installation(self):
         self.assertIn("digital_energy_twin_matomo_installed", conditions(task("Ensure Matomo backup job")))
