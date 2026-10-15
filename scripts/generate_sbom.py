@@ -243,7 +243,7 @@ def create_bom(config: dict[str, Any]) -> dict[str, Any]:
             "bom-ref": reference["bom_ref"],
             "name": name,
             "version": version,
-            "scope": "required",
+            "scope": "optional" if entry.get("optional") is True else "required",
             "licenses": [{"license": {"id": require_string(entry.get("license"), f"{location}.license")}}],
         }
         annotate_component(
