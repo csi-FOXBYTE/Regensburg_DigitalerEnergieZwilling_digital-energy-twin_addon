@@ -128,6 +128,32 @@
       Define inv_addons['digital-energy-twin'].db to use another database server.
   when: digital_energy_twin_db_mode == 'central'
 
+- name: "Digital Energy Twin: Validate Matomo config"
+  ansible.builtin.assert:
+    that:
+      - digital_energy_twin.matomo is mapping
+      - digital_energy_twin.matomo.host is not defined or digital_energy_twin.matomo.host | length > 0
+      - digital_energy_twin.matomo.install_allowed_cidrs | default([]) is sequence
+      - digital_energy_twin.matomo.install_allowed_cidrs | default([]) is not string
+      - digital_energy_twin.matomo.install_allowed_cidrs | default([]) | reject('match', '^[0-9a-fA-F:.]+/[0-9]{1,3}$') | list | length == 0
+      - digital_energy_twin.matomo.install_trusted_proxies | default([]) is sequence
+      - digital_energy_twin.matomo.install_trusted_proxies | default([]) is not string
+      - digital_energy_twin.matomo.install_trusted_proxies | default([]) | reject('match', '^[0-9a-fA-F:.]+/[0-9]{1,3}$') | list | length == 0
+      - digital_energy_twin.matomo.backup | default({}) is mapping
+      - digital_energy_twin.matomo.backup.target | default('pvc') in ['pvc']
+      - digital_energy_twin.matomo.backup.keep_days | default(14) | int > 0
+      - not (digital_energy_twin.matomo.tracking_enabled | default(false) | bool) or (digital_energy_twin.matomo.installed | default(false) | bool)
+      - >-
+        not (digital_energy_twin.matomo.tracking_enabled | default(false) | bool)
+        or (digital_energy_twin.matomo.site_id | default('') | string) is match('^[1-9][0-9]*$')
+    fail_msg: >-
+      inv_addons['digital-energy-twin'].matomo must be a mapping. install_allowed_cidrs
+      and install_trusted_proxies must be lists of CIDRs such as 192.0.2.10/32.
+      backup.target must be pvc (the only target so far) and backup.keep_days a
+      positive number of days. tracking_enabled needs installed: true and the
+      numeric site_id of the DEZ website in Matomo.
+  when: digital_energy_twin.matomo is defined
+
 - name: "Digital Energy Twin: Validate selected application release"
   ansible.builtin.assert:
     that:
@@ -137,6 +163,8 @@
       - digital_energy_twin_application_release.manifest.adminfrontend.digest is match('^sha256:[a-f0-9]{64}$')
       - digital_energy_twin_application_release.manifest.frontend.digest is match('^sha256:[a-f0-9]{64}$')
       - digital_energy_twin_application_release.manifest.backend.digest is match('^sha256:[a-f0-9]{64}$')
+      # Releases up to v1.7.3 have no matomo image.
+      - digital_energy_twin_application_release.manifest.matomo is not defined or digital_energy_twin_application_release.manifest.matomo.digest is match('^sha256:[a-f0-9]{64}$')
     fail_msg: "The selected monorepo release is incomplete; prepare it from a completed release manifest."
   when: digital_energy_twin_application_release is defined
 
@@ -154,6 +182,7 @@
     digital_energy_twin_admin_image: "{{ digital_energy_twin_application_release.manifest.adminfrontend.image ~ '@' ~ digital_energy_twin_application_release.manifest.adminfrontend.digest if digital_energy_twin_application_release is defined else software['digital-energy-twin'].admin.registry ~ '/' ~ software['digital-energy-twin'].admin.repository ~ ':' ~ software['digital-energy-twin'].admin.tag }}"
     digital_energy_twin_public_image: "{{ digital_energy_twin_application_release.manifest.frontend.image ~ '@' ~ digital_energy_twin_application_release.manifest.frontend.digest if digital_energy_twin_application_release is defined else software['digital-energy-twin'].public.registry ~ '/' ~ software['digital-energy-twin'].public.repository ~ ':' ~ software['digital-energy-twin'].public.tag }}"
     digital_energy_twin_backend_image: "{{ digital_energy_twin_application_release.manifest.backend.image ~ '@' ~ digital_energy_twin_application_release.manifest.backend.digest if digital_energy_twin_application_release is defined else software['digital-energy-twin'].backend.registry ~ '/' ~ software['digital-energy-twin'].backend.repository ~ ':' ~ software['digital-energy-twin'].backend.tag }}"
+    digital_energy_twin_matomo_image: "{{ digital_energy_twin_application_release.manifest.matomo.image ~ '@' ~ digital_energy_twin_application_release.manifest.matomo.digest if digital_energy_twin_application_release is defined and digital_energy_twin_application_release.manifest.matomo is defined else '' }}"
     digital_energy_twin_database_secret_name: "digital-energy-twin-database"
     digital_energy_twin_smtp_secret_name: "digital-energy-twin-smtp"
     digital_energy_twin_feedback_mail_to: "{{ digital_energy_twin.feedback_mail_to | default('') | trim }}"
@@ -194,6 +223,62 @@
             Strict-Transport-Security: "max-age=31536000; includeSubDomains"
             Content-Security-Policy: "default-src 'self'; frame-ancestors 'none'; base-uri 'self'"
 
+- name: "Digital Energy Twin: Load Matomo config"
+  ansible.builtin.set_fact:
+    digital_energy_twin_matomo_config: "{{ digital_energy_twin.matomo | default({}) }}"
+
+- name: "Digital Energy Twin: Set Matomo defaults"
+  ansible.builtin.set_fact:
+    digital_energy_twin_matomo_requested: "{{ digital_energy_twin_enabled and (digital_energy_twin_matomo_config.enable | default(false) | bool) }}"
+    # Releases up to v1.7.3 have no matomo image; Matomo is then skipped.
+    digital_energy_twin_matomo_enabled: >-
+      {{ digital_energy_twin_enabled and (digital_energy_twin_matomo_config.enable | default(false) | bool)
+      and digital_energy_twin_matomo_image | length > 0 }}
+    digital_energy_twin_matomo_host: "{{ digital_energy_twin_matomo_config.host | default('matomo.det.' ~ DOMAIN) }}"
+    digital_energy_twin_matomo_installed: "{{ digital_energy_twin_matomo_config.installed | default(false) | bool }}"
+    digital_energy_twin_matomo_install_allowed_cidrs: "{{ digital_energy_twin_matomo_config.install_allowed_cidrs | default([]) }}"
+    digital_energy_twin_matomo_install_trusted_proxies: "{{ digital_energy_twin_matomo_config.install_trusted_proxies | default([]) }}"
+    digital_energy_twin_matomo_name: "digital-energy-twin-matomo"
+    digital_energy_twin_matomo_data_pvc_name: "digital-energy-twin-matomo-data"
+    digital_energy_twin_matomo_data_size: "{{ digital_energy_twin_matomo_config.data_size | default('5Gi') }}"
+    digital_energy_twin_matomo_storage_class: "{{ digital_energy_twin_matomo_config.storage_class | default('') }}"
+    digital_energy_twin_matomo_db_name: "digital-energy-twin-matomo-db"
+    digital_energy_twin_matomo_db_image: >-
+      {{ digital_energy_twin_matomo_config.db_image
+      | default('docker.io/library/mariadb:11.8.9@sha256:6422478cb8e159f080fb1d8ccf65101e26fe51385787fde7d16c3b165a331f15') }}
+    digital_energy_twin_matomo_db_size: "{{ digital_energy_twin_matomo_config.db_size | default('10Gi') }}"
+    digital_energy_twin_matomo_db_secret_name: "digital-energy-twin-matomo-db"
+    digital_energy_twin_matomo_db_database: "matomo"
+    digital_energy_twin_matomo_db_user: "matomo"
+    digital_energy_twin_matomo_backup_name: "digital-energy-twin-matomo-backup"
+    digital_energy_twin_matomo_oidc_client_id: "{{ digital_energy_twin_matomo_config.oidc_client_id | default('matomo') }}"
+    digital_energy_twin_matomo_oidc_secret_name: "digital-energy-twin-matomo-oidc"
+    # Optional internal Keycloak URL for Matomo's token and userinfo calls.
+    digital_energy_twin_matomo_keycloak_internal_url: "{{ digital_energy_twin_matomo_config.keycloak_internal_url | default('') }}"
+    digital_energy_twin_matomo_viewer_role: "matomoViewer"
+    digital_energy_twin_matomo_admin_role: "matomoAdmin"
+    digital_energy_twin_matomo_flow_alias: "matomo browser"
+    # Switch on only once section 12 of the privacy notice is complete for this customer.
+    digital_energy_twin_matomo_tracking: >-
+      {{ digital_energy_twin_enabled and (digital_energy_twin_matomo_config.enable | default(false) | bool)
+      and digital_energy_twin_matomo_image | length > 0 and (digital_energy_twin_matomo_config.installed | default(false) | bool)
+      and (digital_energy_twin_matomo_config.tracking_enabled | default(false) | bool) }}
+    digital_energy_twin_matomo_site_id: "{{ digital_energy_twin_matomo_config.site_id | default('') | string }}"
+    # Civitas Core backs up only PostgreSQL; the addon backs up Matomo itself.
+    digital_energy_twin_matomo_backup_enabled: "{{ (digital_energy_twin_matomo_config.backup | default({})).enable | default(true) | bool }}"
+    digital_energy_twin_matomo_backup_target: "{{ (digital_energy_twin_matomo_config.backup | default({})).target | default('pvc') }}"
+    digital_energy_twin_matomo_backup_schedule: "{{ (digital_energy_twin_matomo_config.backup | default({})).schedule | default('30 2 * * *') }}"
+    digital_energy_twin_matomo_backup_keep_days: "{{ (digital_energy_twin_matomo_config.backup | default({})).keep_days | default(14) | int }}"
+    digital_energy_twin_matomo_backup_size: "{{ (digital_energy_twin_matomo_config.backup | default({})).size | default('10Gi') }}"
+
+- name: "Digital Energy Twin: Report skipped Matomo"
+  ansible.builtin.debug:
+    msg: >-
+      Matomo is enabled, but the selected application release
+      {{ digital_energy_twin_application_release.tag | default('(tag-based selection)') }}
+      contains no matomo image. Matomo is skipped until a release with Matomo is adopted.
+  when: digital_energy_twin_matomo_requested and not digital_energy_twin_matomo_enabled
+
 - name: "Digital Energy Twin: Validate feedback mail transport"
   ansible.builtin.assert:
     that:
@@ -222,6 +307,7 @@
     digital_energy_twin_admin_service_name: "{{ digital_energy_twin_admin_direct_host | replace('.', '-') }}"
     digital_energy_twin_public_service_name: "{{ digital_energy_twin_public_direct_host | replace('.', '-') }}"
     digital_energy_twin_backend_service_name: "{{ digital_energy_twin_backend_direct_host | replace('.', '-') }}"
+    digital_energy_twin_matomo_service_name: "{{ digital_energy_twin_matomo_host | replace('.', '-') }}"
 
 - name: "Digital Energy Twin: Set routing hosts"
   ansible.builtin.set_fact:
@@ -233,6 +319,13 @@
       - name: digital-energy-twin-backend-host
         hostname: "{{ digital_energy_twin_backend_direct_host }}"
 
+- name: "Digital Energy Twin: Add Matomo routing host"
+  ansible.builtin.set_fact:
+    digital_energy_twin_routing_hosts: >-
+      {{ digital_energy_twin_routing_hosts
+      + [{'name': 'digital-energy-twin-matomo-host', 'hostname': digital_energy_twin_matomo_host}] }}
+  when: digital_energy_twin_matomo_enabled
+
 - name: "Digital Energy Twin: Resolve upstreams"
   set_fact:
     digital_energy_twin_admin_upstream_host: "{{ digital_energy_twin_admin_service_name }}.{{ digital_energy_twin_namespace }}.svc.cluster.local"
@@ -240,6 +333,7 @@
     digital_energy_twin_public_upstream_host: "{{ digital_energy_twin_public_service_name }}.{{ digital_energy_twin_namespace }}.svc.cluster.local"
     digital_energy_twin_public_upstream_port: "80"
     digital_energy_twin_backend_upstream_host: "{{ digital_energy_twin_backend_service_name }}.{{ digital_energy_twin_namespace }}.svc.cluster.local"
+    digital_energy_twin_matomo_upstream_host: "{{ digital_energy_twin_matomo_service_name }}.{{ digital_energy_twin_namespace }}.svc.cluster.local"
   when: digital_energy_twin_enabled
 
 - name: "Digital Energy Twin: Set default facts for K8S"
@@ -521,6 +615,111 @@
     namespace: "{{ k8s_namespace }}"
     definition: "{{ lookup('template', addon_dir + 'templates/digital_energy_twin_backend_svc.yaml.j2') | from_yaml }}"
   when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Get Matomo database credentials secret"
+  kubernetes.core.k8s_info:
+    kind: Secret
+    namespace: "{{ k8s_namespace }}"
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    name: "{{ digital_energy_twin_matomo_db_secret_name }}"
+  register: digital_energy_twin_matomo_db_secret
+  when: digital_energy_twin_matomo_enabled
+  no_log: true
+
+# MariaDB keeps the password from its first start, so it is generated only once.
+- name: "Digital Energy Twin: Create Matomo database credentials secret once"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: "{{ digital_energy_twin_matomo_db_secret_name }}"
+      type: Opaque
+      stringData:
+        password: "{{ lookup('ansible.builtin.password', '/dev/null', length=40, chars=['ascii_letters', 'digits']) }}"
+        root-password: "{{ lookup('ansible.builtin.password', '/dev/null', length=40, chars=['ascii_letters', 'digits']) }}"
+  when: digital_energy_twin_matomo_enabled and digital_energy_twin_matomo_db_secret.resources | length == 0
+  no_log: true
+
+- name: "Digital Energy Twin: Ensure Matomo volumes"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition: "{{ lookup('template', addon_dir + 'templates/digital_energy_twin_matomo_pvc.yaml.j2') | from_yaml }}"
+  loop:
+    - name: "{{ digital_energy_twin_matomo_db_name }}-data"
+      app: "{{ digital_energy_twin_matomo_db_name }}"
+      size: "{{ digital_energy_twin_matomo_db_size }}"
+    - name: "{{ digital_energy_twin_matomo_data_pvc_name }}"
+      app: "{{ digital_energy_twin_matomo_name }}"
+      size: "{{ digital_energy_twin_matomo_data_size }}"
+  loop_control:
+    loop_var: digital_energy_twin_matomo_pvc
+    label: "{{ digital_energy_twin_matomo_pvc.name }}"
+  when: digital_energy_twin_matomo_enabled
+
+- name: "Digital Energy Twin: Ensure Matomo database and network rules"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition: "{{ lookup('template', addon_dir + 'templates/' + digital_energy_twin_matomo_db_template) | from_yaml }}"
+  loop:
+    - digital_energy_twin_matomo_db_svc.yaml.j2
+    - digital_energy_twin_matomo_db_netpol.yaml.j2
+    - digital_energy_twin_matomo_db_statefulset.yaml.j2
+    # Before Matomo starts, so the installer is never reachable around APISIX.
+    - digital_energy_twin_matomo_netpol.yaml.j2
+  loop_control:
+    loop_var: digital_energy_twin_matomo_db_template
+  when: digital_energy_twin_matomo_enabled
+
+- name: "Digital Energy Twin: Ensure Matomo backup volume"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition: "{{ lookup('template', addon_dir + 'templates/digital_energy_twin_matomo_pvc.yaml.j2') | from_yaml }}"
+  vars:
+    digital_energy_twin_matomo_pvc:
+      name: "{{ digital_energy_twin_matomo_backup_name }}"
+      app: "{{ digital_energy_twin_matomo_backup_name }}"
+      size: "{{ digital_energy_twin_matomo_backup_size }}"
+  when: digital_energy_twin_matomo_enabled and digital_energy_twin_matomo_backup_enabled and digital_energy_twin_matomo_backup_target == 'pvc'
+
+# Before the installation there is nothing to back up and every run would fail.
+- name: "Digital Energy Twin: Ensure Matomo backup job"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition: "{{ lookup('template', addon_dir + 'templates/digital_energy_twin_matomo_backup_cronjob.yaml.j2') | from_yaml }}"
+  when:
+    - digital_energy_twin_matomo_enabled
+    - digital_energy_twin_matomo_backup_enabled
+    - digital_energy_twin_matomo_backup_target == 'pvc'
+    - digital_energy_twin_matomo_installed
+
+- name: "Digital Energy Twin: Remove Matomo backup job while backups are off"
+  kubernetes.core.k8s:
+    state: absent
+    api_version: batch/v1
+    kind: CronJob
+    name: "{{ digital_energy_twin_matomo_backup_name }}"
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+  when: digital_energy_twin_matomo_enabled and not (digital_energy_twin_matomo_backup_enabled and digital_energy_twin_matomo_installed)
 
 - name: "Digital Energy Twin: Ensure Ingress routing for addon hosts"
   kubernetes.core.k8s:
@@ -1295,3 +1494,872 @@
       - 200
       - 201
   when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Upsert APISIX upstream (matomo)"
+  ansible.builtin.uri:
+    method: PUT
+    url: "https://api-admin.{{ DOMAIN }}/apisix/admin/upstreams/digital-energy-twin-matomo-upstream"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    body_format: json
+    body:
+      name: "digital-energy-twin-matomo-upstream"
+      desc: "Matomo web analytics upstream"
+      type: "roundrobin"
+      scheme: "http"
+      nodes: "{{ { (digital_energy_twin_matomo_upstream_host ~ ':80'): 1 } }}"
+    headers:
+      Accept: application/json
+      X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
+    status_code:
+      - 200
+      - 201
+  when: digital_energy_twin_matomo_enabled
+
+# Until the web installer has run, anyone reaching it could become superuser.
+# The route then admits only install_allowed_cidrs (nobody if the list is empty).
+- name: "Digital Energy Twin: Upsert Matomo direct-host route"
+  ansible.builtin.uri:
+    method: PUT
+    url: "https://api-admin.{{ DOMAIN }}/apisix/admin/routes/digital-energy-twin-matomo-direct"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    body_format: json
+    body:
+      name: "digital-energy-twin-matomo-direct"
+      desc: "Matomo direct-host route (Matomo and Keycloak handle login)"
+      hosts:
+        - "{{ digital_energy_twin_matomo_host }}"
+      uri: "/*"
+      upstream_id: "digital-energy-twin-matomo-upstream"
+      status: 1
+      plugins: >-
+        {{ {} if digital_energy_twin_matomo_installed
+        else (digital_energy_twin_matomo_install_lock
+        | combine(digital_energy_twin_matomo_real_ip if digital_energy_twin_matomo_install_trusted_proxies | length > 0 else {}))
+        if digital_energy_twin_matomo_install_allowed_cidrs | length > 0
+        else digital_energy_twin_matomo_deny_all }}
+    headers:
+      Accept: application/json
+      X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
+    status_code:
+      - 200
+      - 201
+  vars:
+    digital_energy_twin_matomo_install_lock:
+      ip-restriction:
+        whitelist: "{{ digital_energy_twin_matomo_install_allowed_cidrs }}"
+        message: "Matomo is not installed yet; access is limited to matomo.install_allowed_cidrs."
+    # Behind another proxy APISIX sees the proxy's address; take the client from X-Forwarded-For.
+    digital_energy_twin_matomo_real_ip:
+      real-ip:
+        source: http_x_forwarded_for
+        trusted_addresses: "{{ digital_energy_twin_matomo_install_trusted_proxies }}"
+        recursive: true
+    digital_energy_twin_matomo_deny_all:
+      serverless-pre-function:
+        _meta:
+          disable: false
+        phase: rewrite
+        functions:
+          - |-
+            return function()
+              ngx.status = 403
+              ngx.header["Content-Type"] = "application/json"
+              ngx.say('{"message":"Matomo is not installed yet; set matomo.install_allowed_cidrs to install it"}')
+              return ngx.exit(403)
+            end
+  when: digital_energy_twin_matomo_enabled
+
+# The token from the start of the run may have expired after all the APISIX
+# tasks; the temporary check users at the end must still be deletable.
+- name: "Digital Energy Twin: Refresh IDM settings for Matomo"
+  ansible.builtin.include_tasks:
+    file: "../../../tasks/access/apis/idm_settings_for_apis.yaml"
+  when: digital_energy_twin_matomo_enabled
+
+- name: "Digital Energy Twin: Set Matomo Keycloak facts"
+  ansible.builtin.set_fact:
+    digital_energy_twin_keycloak_realm_url: "{{ inv_access.platform.hostname }}/admin/realms/{{ inv_access.tenant.realm_name }}"
+    digital_energy_twin_matomo_oidc_issuer: "{{ inv_access.platform.hostname }}/realms/{{ inv_access.tenant.realm_name }}"
+    digital_energy_twin_matomo_callback_uri: "https://{{ digital_energy_twin_matomo_host }}/index.php?module=LoginOIDC&action=callback&provider=oidc"
+    digital_energy_twin_matomo_client_settings:
+      name: "Matomo"
+      enabled: true
+      protocol: "openid-connect"
+      publicClient: false
+      clientAuthenticatorType: "client-secret"
+      standardFlowEnabled: true
+      implicitFlowEnabled: false
+      directAccessGrantsEnabled: false
+      serviceAccountsEnabled: false
+      redirectUris:
+        - "https://{{ digital_energy_twin_matomo_host }}/index.php?module=LoginOIDC&action=callback&provider=oidc"
+      webOrigins: []
+      attributes:
+        post.logout.redirect.uris: "https://{{ digital_energy_twin_matomo_host }}/*"
+        oauth2.device.authorization.grant.enabled: "false"
+        oidc.ciba.grant.enabled: "false"
+    # Keycloak's role condition names client roles <clientId>.<role>. A role that
+    # does not exist makes the condition false, which lets everyone in.
+    digital_energy_twin_matomo_role_conditions:
+      - alias: "matomo not viewer"
+        role: "{{ digital_energy_twin_oidc_client_id }}.{{ digital_energy_twin_matomo_viewer_role }}"
+      - alias: "matomo not admin"
+        role: "{{ digital_energy_twin_oidc_client_id }}.{{ digital_energy_twin_matomo_admin_role }}"
+    digital_energy_twin_matomo_deny_message: >-
+      Kein Zugriff auf Matomo: Ihrem Konto fehlt die Rolle
+      {{ digital_energy_twin_matomo_viewer_role }} oder {{ digital_energy_twin_matomo_admin_role }}.
+  when: digital_energy_twin_matomo_enabled
+
+- name: "Digital Energy Twin: Ensure Matomo client roles on the DEZ client"
+  ansible.builtin.uri:
+    method: POST
+    url: "{{ digital_energy_twin_keycloak_realm_url }}/clients/{{ digital_energy_twin_client_internal_id }}/roles"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    body_format: json
+    body:
+      name: "{{ digital_energy_twin_matomo_role.name }}"
+      description: "{{ digital_energy_twin_matomo_role.description }}"
+      composite: false
+      clientRole: true
+    headers:
+      Accept: application/json
+      Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+    status_code:
+      - 201
+      - 409
+  loop:
+    - name: "{{ digital_energy_twin_matomo_viewer_role }}"
+      description: "Read access to the DEZ Matomo reports"
+    - name: "{{ digital_energy_twin_matomo_admin_role }}"
+      description: "Read access and management of the DEZ Matomo website"
+  loop_control:
+    loop_var: digital_energy_twin_matomo_role
+    label: "{{ digital_energy_twin_matomo_role.name }}"
+  when: digital_energy_twin_matomo_enabled
+
+- name: "Digital Energy Twin: Get Matomo viewer role"
+  ansible.builtin.uri:
+    method: GET
+    url: "{{ digital_energy_twin_keycloak_realm_url }}/clients/{{ digital_energy_twin_client_internal_id }}/roles/{{ digital_energy_twin_matomo_viewer_role | urlencode }}"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    headers:
+      Accept: application/json
+      Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+    status_code: 200
+  register: digital_energy_twin_matomo_viewer_role_info
+  when: digital_energy_twin_matomo_enabled
+
+- name: "Digital Energy Twin: Let the Matomo admin role include the viewer role"
+  ansible.builtin.uri:
+    method: POST
+    url: "{{ digital_energy_twin_keycloak_realm_url }}/clients/{{ digital_energy_twin_client_internal_id }}/roles/{{ digital_energy_twin_matomo_admin_role | urlencode }}/composites"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    body_format: json
+    body:
+      - "{{ digital_energy_twin_matomo_viewer_role_info.json }}"
+    headers:
+      Accept: application/json
+      Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+    status_code: 204
+  when: digital_energy_twin_matomo_enabled
+
+- name: "Digital Energy Twin: Get realm settings for Matomo"
+  ansible.builtin.uri:
+    method: GET
+    url: "{{ digital_energy_twin_keycloak_realm_url }}"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    headers:
+      Accept: application/json
+      Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+    status_code: 200
+  register: digital_energy_twin_realm_settings
+  when: digital_energy_twin_matomo_enabled
+
+- name: "Digital Energy Twin: Validate that users cannot change their username"
+  ansible.builtin.assert:
+    that:
+      - not (digital_energy_twin_realm_settings.json.editUsernameAllowed | default(false) | bool)
+    fail_msg: >-
+      Realm '{{ inv_access.tenant.realm_name }}' lets users edit their username.
+      Matomo links Keycloak users to Matomo users by username, so a renamed
+      account could take over another Matomo login. Turn off "Edit username"
+      (Realm settings > Login) and rerun.
+  when: digital_energy_twin_matomo_enabled
+
+- name: "Digital Energy Twin: Get the realm browser flow"
+  ansible.builtin.uri:
+    method: GET
+    url: "{{ digital_energy_twin_keycloak_realm_url }}/authentication/flows/{{ digital_energy_twin_realm_settings.json.browserFlow | urlencode }}/executions"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    headers:
+      Accept: application/json
+      Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+    status_code: 200
+  register: digital_energy_twin_realm_browser_flow
+  when: digital_energy_twin_matomo_enabled
+
+# The Matomo flow copies the realm's OTP: conditional where the realm asks only
+# users who set it up, required where the realm demands it from everyone.
+# Other second factors are not copied; Matomo would then be reachable without them.
+- name: "Digital Energy Twin: Inspect second factors of the realm browser flow"
+  ansible.builtin.set_fact:
+    digital_energy_twin_matomo_flow_otp: >-
+      {{ digital_energy_twin_realm_browser_flow.json | selectattr('providerId', 'defined')
+      | selectattr('providerId', 'equalto', 'auth-otp-form') | rejectattr('requirement', 'equalto', 'DISABLED') | list | length > 0 }}
+    # Forced = an enabled OTP form without a CONDITIONAL step above it (steps come depth-first).
+    digital_energy_twin_matomo_flow_otp_forced: >-
+      {% set ns = namespace(forced=false) %}{% set above = {} %}{% for step in digital_energy_twin_realm_browser_flow.json %}{% set _ =
+      above.update({step.level: step.requirement}) %}{% if step.providerId | default('') == 'auth-otp-form' and step.requirement != 'DISABLED'
+      and range(step.level) | map('extract', above) | select('equalto', 'CONDITIONAL') | list | length == 0 %}{% set ns.forced =
+      true %}{% endif %}{% endfor %}{{ ns.forced }}
+    digital_energy_twin_matomo_flow_uncopied: >-
+      {{ digital_energy_twin_realm_browser_flow.json | selectattr('providerId', 'defined')
+      | selectattr('providerId', 'in', ['webauthn-authenticator', 'webauthn-authenticator-passwordless', 'auth-conditional-otp-form', 'auth-x509-client-username-form'])
+      | rejectattr('requirement', 'equalto', 'DISABLED') | map(attribute='providerId') | list }}
+  when: digital_energy_twin_matomo_enabled
+
+- name: "Digital Energy Twin: Validate that the Matomo flow keeps the realm's second factors"
+  ansible.builtin.assert:
+    that:
+      - digital_energy_twin_matomo_flow_uncopied | length == 0
+    fail_msg: >-
+      The realm browser flow '{{ digital_energy_twin_realm_settings.json.browserFlow }}' uses
+      {{ digital_energy_twin_matomo_flow_uncopied | join(', ') }}. The Matomo flow only copies
+      the OTP form; extend "Set Matomo browser flow steps" in this addon first.
+  when: digital_energy_twin_matomo_enabled
+
+# Subflow and setting names get the flow's tag appended when created, because
+# Keycloak needs them unique while an old and a new flow exist side by side.
+- name: "Digital Energy Twin: Set Matomo browser flow steps"
+  ansible.builtin.set_fact:
+    # Depth-first, so each parent gets its steps in this order. Reference:
+    # images/matomo/sso-test/realm-dez.json in the monorepo.
+    digital_energy_twin_matomo_flow_steps: >-
+      {{ [
+        {'parent': digital_energy_twin_matomo_flow_alias, 'level': 0, 'name': 'matomo authentication', 'flow': true, 'requirement': 'REQUIRED'},
+        {'parent': 'matomo authentication', 'level': 1, 'name': 'auth-cookie', 'flow': false, 'requirement': 'ALTERNATIVE'},
+        {'parent': 'matomo authentication', 'level': 1, 'name': 'matomo forms', 'flow': true, 'requirement': 'ALTERNATIVE'},
+        {'parent': 'matomo forms', 'level': 2, 'name': 'auth-username-password-form', 'flow': false, 'requirement': 'REQUIRED'},
+      ] + ([
+        {'parent': 'matomo forms', 'level': 2, 'name': 'auth-otp-form', 'flow': false, 'requirement': 'REQUIRED'},
+      ] if digital_energy_twin_matomo_flow_otp_forced | bool else [
+        {'parent': 'matomo forms', 'level': 2, 'name': 'matomo conditional otp', 'flow': true, 'requirement': 'CONDITIONAL'},
+        {'parent': 'matomo conditional otp', 'level': 3, 'name': 'conditional-user-configured', 'flow': false, 'requirement': 'REQUIRED'},
+        {'parent': 'matomo conditional otp', 'level': 3, 'name': 'auth-otp-form', 'flow': false, 'requirement': 'REQUIRED'},
+      ] if digital_energy_twin_matomo_flow_otp | bool else []) + [
+        {'parent': digital_energy_twin_matomo_flow_alias, 'level': 0, 'name': 'matomo role gate', 'flow': true, 'requirement': 'CONDITIONAL'},
+        {'parent': 'matomo role gate', 'level': 1, 'name': 'conditional-user-role', 'flow': false, 'requirement': 'REQUIRED',
+         'config': {'alias': digital_energy_twin_matomo_role_conditions[0].alias,
+                    'config': {'condUserRole': digital_energy_twin_matomo_role_conditions[0].role, 'negate': 'true'}}},
+        {'parent': 'matomo role gate', 'level': 1, 'name': 'conditional-user-role', 'flow': false, 'requirement': 'REQUIRED',
+         'config': {'alias': digital_energy_twin_matomo_role_conditions[1].alias,
+                    'config': {'condUserRole': digital_energy_twin_matomo_role_conditions[1].role, 'negate': 'true'}}},
+        {'parent': 'matomo role gate', 'level': 1, 'name': 'deny-access-authenticator', 'flow': false, 'requirement': 'REQUIRED',
+         'config': {'alias': 'matomo deny message', 'config': {'denyErrorMessage': digital_energy_twin_matomo_deny_message}}},
+      ] }}
+  when: digital_energy_twin_matomo_enabled
+
+- name: "Digital Energy Twin: Describe the expected Matomo browser flow"
+  ansible.builtin.set_fact:
+    digital_energy_twin_matomo_flow_expected: >-
+      {% set steps = [] %}{% for step in digital_energy_twin_matomo_flow_steps %}{% set _ = steps.append([step.level, step.name,
+      step.requirement, (step.config.config | default({})) | dictsort | map('join', '=') | join(';')] | join('|')) %}{% endfor %}{{ steps }}
+  when: digital_energy_twin_matomo_enabled
+
+# A new content gets a new name, so the client keeps its verified flow until the
+# replacement is verified too.
+- name: "Digital Energy Twin: Name the Matomo browser flow after its content"
+  ansible.builtin.set_fact:
+    digital_energy_twin_matomo_flow_hash: "{{ (digital_energy_twin_matomo_flow_expected | to_json | hash('sha1'))[:8] }}"
+  when: digital_energy_twin_matomo_enabled
+
+- name: "Digital Energy Twin: Find Matomo OIDC client"
+  ansible.builtin.uri:
+    method: GET
+    url: "{{ digital_energy_twin_keycloak_realm_url }}/clients?clientId={{ digital_energy_twin_matomo_oidc_client_id | urlencode }}"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    headers:
+      Accept: application/json
+      Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+    status_code: 200
+  register: digital_energy_twin_matomo_client_lookup
+  when: digital_energy_twin_matomo_enabled
+
+- name: "Digital Energy Twin: Get authentication flows"
+  ansible.builtin.uri:
+    method: GET
+    url: "{{ digital_energy_twin_keycloak_realm_url }}/authentication/flows"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    headers:
+      Accept: application/json
+      Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+    status_code: 200
+  register: digital_energy_twin_auth_flows
+  when: digital_energy_twin_matomo_enabled
+
+- name: "Digital Energy Twin: Select existing Matomo browser flows"
+  ansible.builtin.set_fact:
+    digital_energy_twin_matomo_flow: >-
+      {{ digital_energy_twin_auth_flows.json
+      | selectattr('alias', 'equalto', digital_energy_twin_matomo_flow_alias ~ ' ' ~ digital_energy_twin_matomo_flow_hash) | first | default({}) }}
+    # All flows this addon created, including older contents, to remove after the switch.
+    digital_energy_twin_matomo_flows_previous: >-
+      {{ digital_energy_twin_auth_flows.json
+      | selectattr('alias', 'match', '^' ~ digital_energy_twin_matomo_flow_alias ~ '( [0-9a-f]{8}(-[0-9]{14})?)?$') | list }}
+  when: digital_energy_twin_matomo_enabled
+
+- name: "Digital Energy Twin: Read existing Matomo browser flow"
+  ansible.builtin.uri:
+    method: GET
+    url: "{{ digital_energy_twin_keycloak_realm_url }}/authentication/flows/{{ digital_energy_twin_matomo_flow.alias | urlencode }}/executions"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    headers:
+      Accept: application/json
+      Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+    status_code: 200
+  register: digital_energy_twin_matomo_flow_existing
+  when: digital_energy_twin_matomo_enabled and digital_energy_twin_matomo_flow.id is defined
+
+- name: "Digital Energy Twin: Read existing Matomo browser flow settings"
+  ansible.builtin.uri:
+    method: GET
+    url: "{{ digital_energy_twin_keycloak_realm_url }}/authentication/config/{{ digital_energy_twin_matomo_flow_item.authenticationConfig }}"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    headers:
+      Accept: application/json
+      Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+    status_code: 200
+  register: digital_energy_twin_matomo_flow_existing_configs
+  loop: "{{ digital_energy_twin_matomo_flow_existing.json | default([]) | selectattr('authenticationConfig', 'defined') | list }}"
+  loop_control:
+    loop_var: digital_energy_twin_matomo_flow_item
+    label: "{{ digital_energy_twin_matomo_flow_item.displayName }}"
+  when: digital_energy_twin_matomo_enabled and digital_energy_twin_matomo_flow.id is defined
+
+- name: "Digital Energy Twin: Compare existing Matomo browser flow"
+  ansible.builtin.set_fact:
+    digital_energy_twin_matomo_flow_matches: "{{ digital_energy_twin_matomo_flow_actual == digital_energy_twin_matomo_flow_expected }}"
+  vars:
+    digital_energy_twin_matomo_flow_actual: >-
+      {% set configs = {} %}{% for result in digital_energy_twin_matomo_flow_existing_configs.results | default([]) %}{% set _ =
+      configs.update({result.json.id: result.json.config}) %}{% endfor %}{% set steps = [] %}{% for item in
+      digital_energy_twin_matomo_flow_existing.json %}{% set _ =
+      steps.append([item.level,
+      (item.displayName | regex_replace(' ' ~ digital_energy_twin_matomo_flow_hash ~ '$', '')) if item.authenticationFlow | default(false) else item.providerId,
+      item.requirement,
+      configs.get(item.authenticationConfig | default(''), {}) | dictsort | map('join', '=') | join(';')] | join('|')) %}{% endfor %}{{ steps }}
+  when: digital_energy_twin_matomo_enabled and digital_energy_twin_matomo_flow.id is defined
+
+# A flow under the expected name that differs was changed by hand: build a
+# fresh one beside it instead of trusting or editing it.
+- name: "Digital Energy Twin: Choose the Matomo browser flow to use"
+  ansible.builtin.set_fact:
+    digital_energy_twin_matomo_flow_build: "{{ digital_energy_twin_matomo_flow.id is not defined or not digital_energy_twin_matomo_flow_matches | bool }}"
+    digital_energy_twin_matomo_flow_tag: >-
+      {{ digital_energy_twin_matomo_flow_hash if digital_energy_twin_matomo_flow.id is not defined or digital_energy_twin_matomo_flow_matches | bool
+      else digital_energy_twin_matomo_flow_hash ~ '-' ~ now(utc=true).strftime('%Y%m%d%H%M%S') }}
+  when: digital_energy_twin_matomo_enabled
+
+- name: "Digital Energy Twin: Name the Matomo browser flow to use"
+  ansible.builtin.set_fact:
+    digital_energy_twin_matomo_flow_name: "{{ digital_energy_twin_matomo_flow_alias }} {{ digital_energy_twin_matomo_flow_tag }}"
+  when: digital_energy_twin_matomo_enabled
+
+- name: "Digital Energy Twin: Report a changed Matomo browser flow"
+  ansible.builtin.debug:
+    msg: >-
+      The flow '{{ digital_energy_twin_matomo_flow.alias }}' was changed by hand. The addon builds
+      '{{ digital_energy_twin_matomo_flow_name }}', switches the client
+      to it once it is verified, and then removes the changed flow.
+  when: digital_energy_twin_matomo_enabled and digital_energy_twin_matomo_flow.id is defined and digital_energy_twin_matomo_flow_build | bool
+
+- name: "Digital Energy Twin: Create Matomo browser flow"
+  ansible.builtin.uri:
+    method: POST
+    url: "{{ digital_energy_twin_keycloak_realm_url }}/authentication/flows"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    body_format: json
+    body:
+      alias: "{{ digital_energy_twin_matomo_flow_name }}"
+      description: "Browser login for Matomo: denies users without a Matomo role, also with an existing SSO session"
+      providerId: basic-flow
+      topLevel: true
+      builtIn: false
+    headers:
+      Accept: application/json
+      Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+    status_code: 201
+  register: digital_energy_twin_matomo_flow_created
+  when: digital_energy_twin_matomo_enabled and digital_energy_twin_matomo_flow_build | bool
+
+- name: "Digital Energy Twin: Add Matomo browser flow steps"
+  ansible.builtin.uri:
+    method: POST
+    url: >-
+      {{ digital_energy_twin_keycloak_realm_url }}/authentication/flows/{{
+      (digital_energy_twin_matomo_flow_step.parent ~ ' ' ~ digital_energy_twin_matomo_flow_tag) | urlencode
+      }}/executions/{{ 'flow' if digital_energy_twin_matomo_flow_step.flow else 'execution' }}
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    body_format: json
+    body: >-
+      {{ {'alias': digital_energy_twin_matomo_flow_step.name ~ ' ' ~ digital_energy_twin_matomo_flow_tag, 'type': 'basic-flow',
+      'provider': 'registration-page-form', 'description': ''}
+      if digital_energy_twin_matomo_flow_step.flow else {'provider': digital_energy_twin_matomo_flow_step.name} }}
+    headers:
+      Accept: application/json
+      Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+    status_code: 201
+  loop: "{{ digital_energy_twin_matomo_flow_steps }}"
+  loop_control:
+    loop_var: digital_energy_twin_matomo_flow_step
+    label: "{{ digital_energy_twin_matomo_flow_step.parent }} > {{ digital_energy_twin_matomo_flow_step.name }}"
+  when: digital_energy_twin_matomo_enabled and digital_energy_twin_matomo_flow_created is not skipped
+
+- name: "Digital Energy Twin: Read new Matomo browser flow"
+  ansible.builtin.uri:
+    method: GET
+    url: "{{ digital_energy_twin_keycloak_realm_url }}/authentication/flows/{{ digital_energy_twin_matomo_flow_name | urlencode }}/executions"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    headers:
+      Accept: application/json
+      Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+    status_code: 200
+  register: digital_energy_twin_matomo_flow_new
+  when: digital_energy_twin_matomo_enabled and digital_energy_twin_matomo_flow_created is not skipped
+
+# New steps start as DISABLED; both lists are in the same depth-first order.
+- name: "Digital Energy Twin: Set Matomo browser flow requirements"
+  ansible.builtin.uri:
+    method: PUT
+    url: "{{ digital_energy_twin_keycloak_realm_url }}/authentication/flows/{{ digital_energy_twin_matomo_flow_name | urlencode }}/executions"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    body_format: json
+    body: "{{ digital_energy_twin_matomo_flow_pair.0 | combine({'requirement': digital_energy_twin_matomo_flow_pair.1.requirement}) }}"
+    headers:
+      Accept: application/json
+      Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+    status_code:
+      - 202
+      - 204
+  loop: "{{ digital_energy_twin_matomo_flow_new.json | zip(digital_energy_twin_matomo_flow_steps) | list }}"
+  loop_control:
+    loop_var: digital_energy_twin_matomo_flow_pair
+    label: "{{ digital_energy_twin_matomo_flow_pair.1.name }}: {{ digital_energy_twin_matomo_flow_pair.1.requirement }}"
+  when: digital_energy_twin_matomo_enabled and digital_energy_twin_matomo_flow_created is not skipped
+
+- name: "Digital Energy Twin: Configure Matomo role gate"
+  ansible.builtin.uri:
+    method: POST
+    url: "{{ digital_energy_twin_keycloak_realm_url }}/authentication/executions/{{ digital_energy_twin_matomo_flow_pair.0.id }}/config"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    body_format: json
+    body: >-
+      {{ digital_energy_twin_matomo_flow_pair.1.config
+      | combine({'alias': digital_energy_twin_matomo_flow_pair.1.config.alias ~ ' ' ~ digital_energy_twin_matomo_flow_tag}) }}
+    headers:
+      Accept: application/json
+      Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+    status_code: 201
+  loop: "{{ digital_energy_twin_matomo_flow_new.json | zip(digital_energy_twin_matomo_flow_steps) | selectattr('1.config', 'defined') | list }}"
+  loop_control:
+    loop_var: digital_energy_twin_matomo_flow_pair
+    label: "{{ digital_energy_twin_matomo_flow_pair.1.config.alias }}"
+  when: digital_energy_twin_matomo_enabled and digital_energy_twin_matomo_flow_created is not skipped
+
+- name: "Digital Energy Twin: Read Matomo browser flow for verification"
+  ansible.builtin.uri:
+    method: GET
+    url: "{{ digital_energy_twin_keycloak_realm_url }}/authentication/flows/{{ digital_energy_twin_matomo_flow_name | urlencode }}/executions"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    headers:
+      Accept: application/json
+      Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+    status_code: 200
+  register: digital_energy_twin_matomo_flow_final
+  when: digital_energy_twin_matomo_enabled
+
+- name: "Digital Energy Twin: Read Matomo browser flow settings for verification"
+  ansible.builtin.uri:
+    method: GET
+    url: "{{ digital_energy_twin_keycloak_realm_url }}/authentication/config/{{ digital_energy_twin_matomo_flow_item.authenticationConfig }}"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    headers:
+      Accept: application/json
+      Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+    status_code: 200
+  register: digital_energy_twin_matomo_flow_final_configs
+  loop: "{{ digital_energy_twin_matomo_flow_final.json | selectattr('authenticationConfig', 'defined') | list }}"
+  loop_control:
+    loop_var: digital_energy_twin_matomo_flow_item
+    label: "{{ digital_energy_twin_matomo_flow_item.displayName }}"
+  when: digital_energy_twin_matomo_enabled
+
+# Until this passes, the client stays on its previous, verified flow.
+- name: "Digital Energy Twin: Validate Matomo browser flow"
+  ansible.builtin.assert:
+    that:
+      - digital_energy_twin_matomo_flow_actual == digital_energy_twin_matomo_flow_expected
+    fail_msg: >-
+      The flow '{{ digital_energy_twin_matomo_flow_name }}' differs from the
+      expected structure. Expected {{ digital_energy_twin_matomo_flow_expected }}, found {{ digital_energy_twin_matomo_flow_actual }}.
+  vars:
+    digital_energy_twin_matomo_flow_actual: >-
+      {% set configs = {} %}{% for result in digital_energy_twin_matomo_flow_final_configs.results | default([]) %}{% set _ =
+      configs.update({result.json.id: result.json.config}) %}{% endfor %}{% set steps = [] %}{% for item in
+      digital_energy_twin_matomo_flow_final.json %}{% set _ =
+      steps.append([item.level,
+      (item.displayName | regex_replace(' ' ~ digital_energy_twin_matomo_flow_tag ~ '$', '')) if item.authenticationFlow | default(false) else item.providerId,
+      item.requirement,
+      configs.get(item.authenticationConfig | default(''), {}) | dictsort | map('join', '=') | join(';')] | join('|')) %}{% endfor %}{{ steps }}
+  when: digital_energy_twin_matomo_enabled
+
+- name: "Digital Energy Twin: Select Matomo browser flow id"
+  ansible.builtin.set_fact:
+    digital_energy_twin_matomo_flow_id: >-
+      {{ (digital_energy_twin_matomo_flow_created.location | default('') | regex_search('[^/]+$'))
+      if digital_energy_twin_matomo_flow_created is not skipped else digital_energy_twin_matomo_flow.id }}
+  when: digital_energy_twin_matomo_enabled
+
+- name: "Digital Energy Twin: Create Matomo OIDC client"
+  ansible.builtin.uri:
+    method: POST
+    url: "{{ digital_energy_twin_keycloak_realm_url }}/clients"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    body_format: json
+    body: "{{ digital_energy_twin_matomo_client_settings | combine({'clientId': digital_energy_twin_matomo_oidc_client_id}) }}"
+    headers:
+      Accept: application/json
+      Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+    status_code:
+      - 201
+      - 409
+  when: digital_energy_twin_matomo_enabled and digital_energy_twin_matomo_client_lookup.json | length == 0
+
+- name: "Digital Energy Twin: Get Matomo OIDC client"
+  ansible.builtin.uri:
+    method: GET
+    url: "{{ digital_energy_twin_keycloak_realm_url }}/clients?clientId={{ digital_energy_twin_matomo_oidc_client_id | urlencode }}"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    headers:
+      Accept: application/json
+      Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+    status_code: 200
+  register: digital_energy_twin_matomo_client
+  when: digital_energy_twin_matomo_enabled
+
+# Also resets settings changed by hand, and binds the role-checking browser flow.
+- name: "Digital Energy Twin: Update Matomo OIDC client and bind its browser flow"
+  ansible.builtin.uri:
+    method: PUT
+    url: "{{ digital_energy_twin_keycloak_realm_url }}/clients/{{ digital_energy_twin_matomo_client.json[0].id }}"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    body_format: json
+    body: >-
+      {{ digital_energy_twin_matomo_client.json[0] | combine(digital_energy_twin_matomo_client_settings,
+      {'authenticationFlowBindingOverrides': {'browser': digital_energy_twin_matomo_flow_id}}, recursive=True) }}
+    headers:
+      Accept: application/json
+      Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+    status_code: 204
+  when: digital_energy_twin_matomo_enabled
+
+# Only now that the client uses the verified flow, so there is never a moment
+# without the role gate.
+- name: "Digital Energy Twin: Remove replaced Matomo browser flows"
+  ansible.builtin.uri:
+    method: DELETE
+    url: "{{ digital_energy_twin_keycloak_realm_url }}/authentication/flows/{{ digital_energy_twin_matomo_old_flow.id }}"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    headers:
+      Accept: application/json
+      Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+    status_code: 204
+  loop: "{{ digital_energy_twin_matomo_flows_previous | rejectattr('id', 'equalto', digital_energy_twin_matomo_flow_id) | list }}"
+  loop_control:
+    loop_var: digital_energy_twin_matomo_old_flow
+    label: "{{ digital_energy_twin_matomo_old_flow.alias }}"
+  when: digital_energy_twin_matomo_enabled
+
+- name: "Digital Energy Twin: Get client scopes"
+  ansible.builtin.uri:
+    method: GET
+    url: "{{ digital_energy_twin_keycloak_realm_url }}/client-scopes"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    headers:
+      Accept: application/json
+      Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+    status_code: 200
+  register: digital_energy_twin_client_scopes
+  when: digital_energy_twin_matomo_enabled
+
+- name: "Digital Energy Twin: Validate client scopes for Matomo"
+  ansible.builtin.assert:
+    that:
+      - digital_energy_twin_client_scopes.json | selectattr('name', 'in', ['basic', 'profile', 'email']) | list | length == 3
+    fail_msg: >-
+      Realm '{{ inv_access.tenant.realm_name }}' must have the client scopes basic, profile
+      and email; Matomo needs preferred_username and email from userinfo.
+  when: digital_energy_twin_matomo_enabled
+
+# userinfo must return preferred_username (profile) and email.
+- name: "Digital Energy Twin: Ensure Matomo default client scopes"
+  ansible.builtin.uri:
+    method: PUT
+    url: "{{ digital_energy_twin_keycloak_realm_url }}/clients/{{ digital_energy_twin_matomo_client.json[0].id }}/default-client-scopes/{{ digital_energy_twin_matomo_scope.id }}"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    headers:
+      Accept: application/json
+      Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+    status_code: 204
+  loop: "{{ digital_energy_twin_client_scopes.json | selectattr('name', 'in', ['basic', 'profile', 'email']) | list }}"
+  loop_control:
+    loop_var: digital_energy_twin_matomo_scope
+    label: "{{ digital_energy_twin_matomo_scope.name }}"
+  when: digital_energy_twin_matomo_enabled
+
+- name: "Digital Energy Twin: Get Matomo OIDC client secret"
+  ansible.builtin.uri:
+    method: GET
+    url: "{{ digital_energy_twin_keycloak_realm_url }}/clients/{{ digital_energy_twin_matomo_client.json[0].id }}/client-secret"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    headers:
+      Accept: application/json
+      Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+    status_code: 200
+  register: digital_energy_twin_matomo_client_secret
+  when: digital_energy_twin_matomo_enabled
+  no_log: true
+
+- name: "Digital Energy Twin: Store Matomo OIDC client secret in addon namespace"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: "{{ digital_energy_twin_matomo_oidc_secret_name }}"
+      type: Opaque
+      stringData:
+        client-secret: "{{ digital_energy_twin_matomo_client_secret.json.value }}"
+  when: digital_energy_twin_matomo_enabled
+  no_log: true
+
+# A misspelled role in the flow lets everyone in, so try it: a user without a
+# Matomo role must be denied, a user with matomoViewer must get through.
+- name: "Digital Energy Twin: Check the Matomo role gate with temporary users"
+  when: digital_energy_twin_matomo_enabled
+  block:
+    - name: "Digital Energy Twin: Set temporary Matomo check users"
+      ansible.builtin.set_fact:
+        digital_energy_twin_matomo_check_users:
+          - username: "matomo-gate-check-{{ lookup('ansible.builtin.password', '/dev/null', length=10, chars=['ascii_lowercase', 'digits']) }}"
+            with_role: false
+          - username: "matomo-gate-check-{{ lookup('ansible.builtin.password', '/dev/null', length=10, chars=['ascii_lowercase', 'digits']) }}"
+            with_role: true
+        digital_energy_twin_matomo_check_password: "{{ lookup('ansible.builtin.password', '/dev/null', length=32, chars=['ascii_letters', 'digits']) }}-Aa1"
+      no_log: true
+
+    - name: "Digital Energy Twin: Create temporary Matomo check users"
+      ansible.builtin.uri:
+        method: POST
+        url: "{{ digital_energy_twin_keycloak_realm_url }}/users"
+        ca_path: "{{ inv_k8s.ingress.ca_path }}"
+        body_format: json
+        body:
+          username: "{{ digital_energy_twin_matomo_check_user.username }}"
+          enabled: true
+          email: "{{ digital_energy_twin_matomo_check_user.username }}@example.invalid"
+          emailVerified: true
+          firstName: "Matomo"
+          lastName: "Gate Check"
+          requiredActions: []
+          credentials:
+            - type: password
+              value: "{{ digital_energy_twin_matomo_check_password }}"
+              temporary: false
+        headers:
+          Accept: application/json
+          Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+        status_code: 201
+      register: digital_energy_twin_matomo_check_created
+      loop: "{{ digital_energy_twin_matomo_check_users }}"
+      loop_control:
+        loop_var: digital_energy_twin_matomo_check_user
+        label: "{{ digital_energy_twin_matomo_check_user.username }}"
+      no_log: true
+
+    - name: "Digital Energy Twin: Give one check user the Matomo viewer role"
+      ansible.builtin.uri:
+        method: POST
+        url: "{{ digital_energy_twin_keycloak_realm_url }}/users/{{ digital_energy_twin_matomo_check_created.results[1].location | regex_search('[^/]+$') }}/role-mappings/clients/{{ digital_energy_twin_client_internal_id }}"
+        ca_path: "{{ inv_k8s.ingress.ca_path }}"
+        body_format: json
+        body:
+          - "{{ digital_energy_twin_matomo_viewer_role_info.json }}"
+        headers:
+          Accept: application/json
+          Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+        status_code: 204
+
+    - name: "Digital Energy Twin: Open the Matomo login page"
+      ansible.builtin.uri:
+        method: GET
+        url: >-
+          {{ digital_energy_twin_matomo_oidc_issuer }}/protocol/openid-connect/auth?client_id={{ digital_energy_twin_matomo_oidc_client_id | urlencode }}&response_type=code&scope=openid&redirect_uri={{ digital_energy_twin_matomo_callback_uri | urlencode | replace('/', '%2F') }}&state=gate-check
+        ca_path: "{{ inv_k8s.ingress.ca_path }}"
+        return_content: true
+        follow_redirects: none
+        status_code: 200
+      register: digital_energy_twin_matomo_check_page
+      loop: "{{ digital_energy_twin_matomo_check_users }}"
+      loop_control:
+        loop_var: digital_energy_twin_matomo_check_user
+        label: "{{ digital_energy_twin_matomo_check_user.username }}"
+
+    - name: "Digital Energy Twin: Log in as the check users"
+      ansible.builtin.uri:
+        method: POST
+        url: "{{ digital_energy_twin_matomo_check_pair.0.content | regex_search('action=\"([^\"]*login-actions/authenticate[^\"]*)\"', '\\1') | first | replace('&amp;', '&') }}"
+        ca_path: "{{ inv_k8s.ingress.ca_path }}"
+        body_format: form-urlencoded
+        body:
+          username: "{{ digital_energy_twin_matomo_check_pair.1.username }}"
+          password: "{{ digital_energy_twin_matomo_check_password }}"
+          credentialId: ""
+        headers:
+          Cookie: "{{ digital_energy_twin_matomo_check_pair.0.cookies_string }}"
+        return_content: true
+        follow_redirects: none
+        status_code:
+          - 200
+          - 302
+          - 400
+          - 401
+          - 403
+      register: digital_energy_twin_matomo_check_login
+      loop: "{{ digital_energy_twin_matomo_check_page.results | zip(digital_energy_twin_matomo_check_users) | list }}"
+      loop_control:
+        loop_var: digital_energy_twin_matomo_check_pair
+        label: "{{ digital_energy_twin_matomo_check_pair.1.username }}"
+      no_log: true
+
+    - name: "Digital Energy Twin: Validate that Keycloak denies Matomo without a Matomo role"
+      ansible.builtin.assert:
+        that:
+          - digital_energy_twin_matomo_check_login.results[0].status != 302
+          - digital_energy_twin_matomo_deny_message in digital_energy_twin_matomo_check_login.results[0].content
+        fail_msg: >-
+          SECURITY: a Keycloak user without {{ digital_energy_twin_matomo_viewer_role }} or
+          {{ digital_energy_twin_matomo_admin_role }} was not denied (HTTP
+          {{ digital_energy_twin_matomo_check_login.results[0].status }}). Check the role names in the
+          flow '{{ digital_energy_twin_matomo_flow_alias }}'; Keycloak logs "Invalid role name submitted"
+          for a wrong one. Do not let users log in to Matomo until this check passes.
+
+    - name: "Digital Energy Twin: Validate that Keycloak admits Matomo with a Matomo role"
+      ansible.builtin.assert:
+        that:
+          - digital_energy_twin_matomo_check_login.results[1].status == 302
+          - >-
+            digital_energy_twin_matomo_check_login.results[1].location is search('module=LoginOIDC.*code=')
+            or digital_energy_twin_matomo_check_login.results[1].location is search('/login-actions/required-action')
+        fail_msg: >-
+          A Keycloak user with {{ digital_energy_twin_matomo_viewer_role }} could not log in through
+          client '{{ digital_energy_twin_matomo_oidc_client_id }}' (HTTP
+          {{ digital_energy_twin_matomo_check_login.results[1].status }}), so the denial check above
+          proves nothing. Check the flow '{{ digital_energy_twin_matomo_flow_alias }}' and the realm's
+          required actions.
+  always:
+    - name: "Digital Energy Twin: Delete temporary Matomo check users"
+      ansible.builtin.uri:
+        method: DELETE
+        url: "{{ digital_energy_twin_keycloak_realm_url }}/users/{{ digital_energy_twin_matomo_check_user.location | regex_search('[^/]+$') }}"
+        ca_path: "{{ inv_k8s.ingress.ca_path }}"
+        headers:
+          Accept: application/json
+          Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+        status_code:
+          - 204
+          - 404
+      loop: "{{ digital_energy_twin_matomo_check_created.results | default([]) | selectattr('location', 'defined') | list }}"
+      loop_control:
+        loop_var: digital_energy_twin_matomo_check_user
+        label: "{{ digital_energy_twin_matomo_check_user.digital_energy_twin_matomo_check_user.username }}"
+
+- name: "Digital Energy Twin: Ensure Matomo deployment"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition: "{{ lookup('template', addon_dir + 'templates/digital_energy_twin_matomo_deploy.yaml.j2') | from_yaml }}"
+  when: digital_energy_twin_matomo_enabled
+
+- name: "Digital Energy Twin: Ensure Matomo service"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition: "{{ lookup('template', addon_dir + 'templates/digital_energy_twin_matomo_svc.yaml.j2') | from_yaml }}"
+  when: digital_energy_twin_matomo_enabled
+
+# matomo.enable: false takes Matomo offline. Volumes, Secrets and the Keycloak
+# setup stay, so enabling it again brings back the same data.
+- name: "Digital Energy Twin: Remove Matomo route when disabled"
+  ansible.builtin.uri:
+    method: DELETE
+    url: "https://api-admin.{{ DOMAIN }}/apisix/admin/{{ digital_energy_twin_matomo_apisix_object }}"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    headers:
+      Accept: application/json
+      X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
+    status_code:
+      - 200
+      - 404
+  loop:
+    - routes/digital-energy-twin-matomo-direct
+    - upstreams/digital-energy-twin-matomo-upstream
+  loop_control:
+    loop_var: digital_energy_twin_matomo_apisix_object
+  when: digital_energy_twin_enabled and not digital_energy_twin_matomo_requested
+
+- name: "Digital Energy Twin: Remove Matomo entry routing when disabled"
+  kubernetes.core.k8s:
+    state: absent
+    api_version: "{{ digital_energy_twin_matomo_route_object.api_version }}"
+    kind: "{{ digital_energy_twin_matomo_route_object.kind }}"
+    name: "{{ digital_energy_twin_matomo_route_object.name }}"
+    kubeconfig: "{{ K8S_KUBECONFIG_PATH }}/{{ inv_access.apisix.ns_kubeconfig }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ digital_energy_twin_apisix_namespace }}"
+  loop: >-
+    {{ [{'api_version': 'networking.k8s.io/v1', 'kind': 'Ingress', 'name': 'digital-energy-twin-matomo-host'}]
+    if digital_energy_twin_routing_mode == 'ingress' else
+    [{'api_version': 'gateway.networking.k8s.io/v1', 'kind': 'HTTPRoute', 'name': 'digital-energy-twin-matomo-host'},
+     {'api_version': 'gateway.networking.k8s.io/v1', 'kind': 'HTTPRoute', 'name': 'digital-energy-twin-matomo-host-redirect'},
+     {'api_version': 'gateway.networking.k8s.io/v1', 'kind': 'Gateway', 'name': 'digital-energy-twin-matomo-host'}] }}
+  loop_control:
+    loop_var: digital_energy_twin_matomo_route_object
+    label: "{{ digital_energy_twin_matomo_route_object.kind }}/{{ digital_energy_twin_matomo_route_object.name }}"
+  when: digital_energy_twin_enabled and not digital_energy_twin_matomo_requested
+
+- name: "Digital Energy Twin: Stop Matomo when disabled"
+  kubernetes.core.k8s:
+    state: absent
+    api_version: "{{ digital_energy_twin_matomo_workload.api_version }}"
+    kind: "{{ digital_energy_twin_matomo_workload.kind }}"
+    name: "{{ digital_energy_twin_matomo_workload.name }}"
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+  loop:
+    - {api_version: apps/v1, kind: Deployment, name: "{{ digital_energy_twin_matomo_name }}"}
+    - {api_version: batch/v1, kind: CronJob, name: "{{ digital_energy_twin_matomo_backup_name }}"}
+    - {api_version: apps/v1, kind: StatefulSet, name: "{{ digital_energy_twin_matomo_db_name }}"}
+  loop_control:
+    loop_var: digital_energy_twin_matomo_workload
+    label: "{{ digital_energy_twin_matomo_workload.kind }}/{{ digital_energy_twin_matomo_workload.name }}"
+  when: digital_energy_twin_enabled and not digital_energy_twin_matomo_requested

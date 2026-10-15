@@ -1,0 +1,128 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ digital_energy_twin_matomo_name }}"
+  labels:
+    app: "{{ digital_energy_twin_matomo_name }}"
+spec:
+  replicas: 1
+  # The ReadWriteOnce volume holds config.ini.php; never run two pods at once.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: "{{ digital_energy_twin_matomo_name }}"
+  template:
+    metadata:
+      labels:
+        app: "{{ digital_energy_twin_matomo_name }}"
+      annotations:
+        # The entrypoint reads the client secret only on start.
+        checksum/oidc-client-secret: "{{ digital_energy_twin_matomo_client_secret.json.value | hash('sha256') }}"
+    spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: matomo
+          image: "{{ digital_energy_twin_matomo_image }}"
+          imagePullPolicy: Always
+          # The entrypoint starts as root to fill the volume and chown it, then
+          # Apache serves as www-data. Only the capabilities it needs remain.
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - CHOWN
+                - DAC_OVERRIDE
+                - FOWNER
+                - SETUID
+                - SETGID
+                - NET_BIND_SERVICE
+                - KILL
+          env:
+            - name: MATOMO_DATABASE_HOST
+              value: "{{ digital_energy_twin_matomo_db_name }}"
+            - name: MATOMO_DATABASE_ADAPTER
+              value: mysql
+            - name: MATOMO_DATABASE_TABLES_PREFIX
+              value: matomo_
+            - name: MATOMO_DATABASE_USERNAME
+              value: "{{ digital_energy_twin_matomo_db_user }}"
+            - name: MATOMO_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ digital_energy_twin_matomo_db_secret_name }}"
+                  key: password
+            - name: MATOMO_DATABASE_DBNAME
+              value: "{{ digital_energy_twin_matomo_db_database }}"
+            # TLS ends at the ingress; Matomo must still build https URLs.
+            - name: MATOMO_BEHIND_TLS_PROXY
+              value: "1"
+            - name: MATOMO_OIDC_ISSUER
+              value: "{{ digital_energy_twin_matomo_oidc_issuer }}"
+            - name: MATOMO_OIDC_CLIENT_ID
+              value: "{{ digital_energy_twin_matomo_oidc_client_id }}"
+            - name: MATOMO_OIDC_CLIENT_SECRET_FILE
+              value: /run/secrets/matomo-oidc/client-secret
+{% if digital_energy_twin_matomo_keycloak_internal_url %}
+            # Token and userinfo via the internal service; Keycloak must still
+            # issue tokens for MATOMO_OIDC_ISSUER (its configured hostname).
+            - name: MATOMO_OIDC_BACKCHANNEL_URL
+              value: "{{ digital_energy_twin_matomo_keycloak_internal_url | regex_replace('/+$', '') }}/realms/{{ inv_access.tenant.realm_name }}"
+{% endif %}
+          ports:
+            - containerPort: 80
+          startupProbe:
+            httpGet:
+              path: /matomo.php
+              port: 80
+            failureThreshold: 60
+            periodSeconds: 5
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /matomo.php
+              port: 80
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /matomo.php
+              port: 80
+            periodSeconds: 30
+            failureThreshold: 5
+            timeoutSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /var/www/html
+            - name: apache-run
+              mountPath: /var/run/apache2
+            - name: apache-lock
+              mountPath: /var/lock/apache2
+            - name: tmp
+              mountPath: /tmp
+            - name: oidc
+              mountPath: /run/secrets/matomo-oidc
+              readOnly: true
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: "{{ digital_energy_twin_matomo_data_pvc_name }}"
+        - name: apache-run
+          emptyDir: {}
+        - name: apache-lock
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+        - name: oidc
+          secret:
+            secretName: "{{ digital_energy_twin_matomo_oidc_secret_name }}"
+            defaultMode: 0400
+            items:
+              - key: client-secret
+                path: client-secret

@@ -75,6 +75,13 @@ spec:
             - name: FEEDBACK_MAIL_TO
               value: "{{ digital_energy_twin_feedback_mail_to }}"
 {% endif %}
+{% if digital_energy_twin_matomo_tracking | default(false) | bool %}
+            # Without both variables the backend offers no web analytics.
+            - name: MATOMO_URL
+              value: "https://{{ digital_energy_twin_matomo_host }}/matomo.php"
+            - name: MATOMO_SITE_ID
+              value: "{{ digital_energy_twin_matomo_site_id }}"
+{% endif %}
             - name: KEYCLOAK_JWKS_URI
               value: "{{ inv_access.platform.hostname }}/realms/{{ inv_access.tenant.realm_name }}/protocol/openid-connect/certs"
             - name: TILES_URL

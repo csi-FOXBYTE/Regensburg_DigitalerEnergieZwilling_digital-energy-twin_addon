@@ -1,0 +1,130 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: "{{ digital_energy_twin_matomo_backup_name }}"
+  labels:
+    app: "{{ digital_energy_twin_matomo_backup_name }}"
+spec:
+  schedule: "{{ digital_energy_twin_matomo_backup_schedule }}"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 7200
+      template:
+        metadata:
+          labels:
+            app: "{{ digital_energy_twin_matomo_backup_name }}"
+        spec:
+          restartPolicy: Never
+          # The Matomo volume is ReadWriteOnce: run on the node where Matomo runs.
+          affinity:
+            podAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchLabels:
+                      app: "{{ digital_energy_twin_matomo_name }}"
+                  topologyKey: kubernetes.io/hostname
+          # No fsGroup: it would also change the group of the Matomo volume.
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
+          initContainers:
+            # Only touches the backup volume, so the backup itself runs as non-root.
+            - name: prepare-target
+              image: "{{ digital_energy_twin_matomo_db_image }}"
+              command: ["sh", "-c", "mkdir -p /backup/matomo && chown 999:999 /backup/matomo"]
+              securityContext:
+                runAsUser: 0
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+                  add:
+                    - CHOWN
+              volumeMounts:
+                - name: backup
+                  mountPath: /backup
+          containers:
+            - name: backup
+              image: "{{ digital_energy_twin_matomo_db_image }}"
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 999
+                runAsGroup: 999
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              env:
+                - name: MATOMO_DB_HOST
+                  value: "{{ digital_energy_twin_matomo_db_name }}"
+                - name: MATOMO_DB_NAME
+                  value: "{{ digital_energy_twin_matomo_db_database }}"
+                - name: MATOMO_DB_USER
+                  value: "{{ digital_energy_twin_matomo_db_user }}"
+                - name: MATOMO_DB_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: "{{ digital_energy_twin_matomo_db_secret_name }}"
+                      key: password
+                - name: KEEP_DAYS
+                  value: "{{ digital_energy_twin_matomo_backup_keep_days }}"
+              command: ["bash", "-c"]
+              args:
+                - |
+                  set -euo pipefail
+                  umask 077
+                  target=/backup/matomo
+                  chmod 700 "$target"
+                  stamp=$(date -u +%Y%m%dT%H%M%SZ)
+                  dump="$target/matomo-db-$stamp.sql.gz"
+                  config="$target/matomo-config-$stamp.ini.php"
+                  fail() { echo >&2 "backup failed: $*"; rm -f "$dump.tmp" "$config.tmp"; exit 1; }
+                  # Leftovers of a run that was killed midway.
+                  find "$target" -maxdepth 1 -type f -name '*.tmp' -mmin +180 -delete
+
+                  printf '[client]\nuser=%s\npassword=%s\n' "$MATOMO_DB_USER" "$MATOMO_DB_PASSWORD" > /tmp/client.cnf
+                  # --single-transaction gives a consistent dump while Matomo keeps writing.
+                  mariadb-dump --defaults-extra-file=/tmp/client.cnf --host="$MATOMO_DB_HOST" \
+                    --single-transaction --routines --no-tablespaces "$MATOMO_DB_NAME" \
+                    | gzip > "$dump.tmp" || fail "mariadb-dump exited with an error"
+                  gzip -t "$dump.tmp" || fail "the compressed dump is damaged"
+                  { zcat "$dump.tmp" || true; } | grep -q '^CREATE TABLE `matomo_' \
+                    || fail "the dump contains no Matomo tables"
+                  [ "$(zcat "$dump.tmp" | tail -n 1 | cut -c 1-17)" = '-- Dump completed' ] \
+                    || fail "the dump is incomplete"
+
+                  # Only config.ini.php: plugins and common.config.ini.php are rewritten on every start.
+                  cp /matomo-config/config.ini.php "$config.tmp" || fail "config.ini.php is missing"
+                  grep -q '^\[database\]' "$config.tmp" || fail "config.ini.php has no [database] section"
+
+                  mv "$dump.tmp" "$dump"
+                  mv "$config.tmp" "$config"
+                  # Old backups go only after a new one succeeded.
+                  find "$target" -maxdepth 1 -type f \( -name 'matomo-db-*.sql.gz' -o -name 'matomo-config-*.ini.php' \) \
+                    -mmin +"$((KEEP_DAYS * 1440))" -print -delete
+                  echo "backup written: $dump ($(stat -c %s "$dump") bytes), $config"
+              volumeMounts:
+                - name: backup
+                  mountPath: /backup
+                - name: matomo-config
+                  mountPath: /matomo-config
+                  subPath: config
+                  readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: backup
+              persistentVolumeClaim:
+                claimName: "{{ digital_energy_twin_matomo_backup_name }}"
+            - name: matomo-config
+              persistentVolumeClaim:
+                claimName: "{{ digital_energy_twin_matomo_data_pvc_name }}"
+            - name: tmp
+              emptyDir: {}

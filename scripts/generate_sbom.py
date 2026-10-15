@@ -76,7 +76,11 @@ def read_image_references() -> dict[str, dict[str, str]]:
         if release["tag"] != f"v{manifest['appVersion']}":
             raise ValueError("Application release tag does not match its manifest")
         images = {}
-        for key, component in (("admin", "adminfrontend"), ("public", "frontend"), ("backend", "backend")):
+        for key, component in (("admin", "adminfrontend"), ("public", "frontend"), ("backend", "backend"),
+                               ("matomo", "matomo")):
+            # Releases up to v1.7.3 have no matomo image.
+            if component == "matomo" and component not in manifest:
+                continue
             artifact = manifest[component]
             images[key] = {
                 "image": artifact["image"],
@@ -226,6 +230,8 @@ def create_bom(config: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(entry, dict):
             raise ValueError(f"{location} must be an object")
         source_key = require_string(entry.get("sourceKey"), f"{location}.sourceKey")
+        if source_key not in image_references and entry.get("optional") is True:
+            continue
         if source_key not in image_references:
             raise ValueError(f"{location}.sourceKey does not exist in software references")
         configured_keys.add(source_key)
@@ -237,7 +243,7 @@ def create_bom(config: dict[str, Any]) -> dict[str, Any]:
             "bom-ref": reference["bom_ref"],
             "name": name,
             "version": version,
-            "scope": "required",
+            "scope": "optional" if entry.get("optional") is True else "required",
             "licenses": [{"license": {"id": require_string(entry.get("license"), f"{location}.license")}}],
         }
         annotate_component(
@@ -376,7 +382,7 @@ def create_bom(config: dict[str, Any]) -> dict[str, Any]:
                     "name": "sbom:container-detail",
                     "value": (
                         f"Container components are selected image references; "
-                        f"{child_bom_count} of {len(image_config)} verified child SBOMs are "
+                        f"{child_bom_count} of {len(image_references)} verified child SBOMs are "
                         "bundled and connected through hashed CycloneDX BOM-Link references"
                     ),
                 },

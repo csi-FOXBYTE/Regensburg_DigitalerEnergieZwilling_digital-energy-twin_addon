@@ -40,9 +40,30 @@
       "notes": "Backend image used for database migration and application runtime; its verified, digest-bound SBOM is maintained as a modular child BOM.",
       "license": "LGPL-3.0-or-later",
       "releaseRepository": "csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_MonoRepo"
+    },
+    {
+      "sourceKey": "matomo",
+      "sbomPath": "sboms/matomo.cdx.json",
+      "relationship": "deployed application container",
+      "notes": "Matomo web analytics image with the LoginOIDC and NoPasswordReset plugins, deployed when inv_addons.digital-energy-twin.matomo.enable is true; its verified, digest-bound SBOM is maintained as a modular child BOM. Releases up to v1.7.3 contain no Matomo image.",
+      "license": "GPL-3.0-or-later",
+      "releaseRepository": "csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_MonoRepo",
+      "optional": true
     }
   ],
   "additionalComponents": [
+    {
+      "type": "container",
+      "bom-ref": "oci:docker.io/library/mariadb@sha256:6422478cb8e159f080fb1d8ccf65101e26fe51385787fde7d16c3b165a331f15",
+      "name": "docker.io/library/mariadb",
+      "version": "11.8.9",
+      "scope": "optional",
+      "ecosystem": "OCI container",
+      "relationship": "deployed database container",
+      "metadataSource": "tasks/digital-energy-twin.yml",
+      "notes": "MariaDB for Matomo and the image of its backup job, deployed only when matomo.enable is true. Pinned by digest; inv_addons.digital-energy-twin.matomo.db_image can override it, for example with a mirror.",
+      "license": "GPL-2.0-only"
+    },
     {
       "type": "application",
       "bom-ref": "component:civitas-core@not-pinned",
