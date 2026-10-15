@@ -1569,6 +1569,13 @@
             end
   when: digital_energy_twin_matomo_enabled
 
+# The token from the start of the run may have expired after all the APISIX
+# tasks; the temporary check users at the end must still be deletable.
+- name: "Digital Energy Twin: Refresh IDM settings for Matomo"
+  ansible.builtin.include_tasks:
+    file: "../../../tasks/access/apis/idm_settings_for_apis.yaml"
+  when: digital_energy_twin_matomo_enabled
+
 - name: "Digital Energy Twin: Set Matomo Keycloak facts"
   ansible.builtin.set_fact:
     digital_energy_twin_keycloak_realm_url: "{{ inv_access.platform.hostname }}/admin/realms/{{ inv_access.tenant.realm_name }}"

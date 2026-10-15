@@ -454,7 +454,8 @@ like for the addon client:
   through, and also if the user with the role is refused, because then the first
   result proves nothing. The users need nothing but a password; a realm that
   requires other attributes or actions when users are created can make the check
-  fail.
+  fail. Before these steps the addon fetches a fresh Keycloak admin token, so it
+  cannot expire during them and leave the temporary users behind.
 
 ### Runbook for each customer
 
