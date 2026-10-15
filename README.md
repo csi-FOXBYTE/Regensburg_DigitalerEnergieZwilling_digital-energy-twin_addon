@@ -399,6 +399,10 @@ inv_addons:
   StorageClass allows volume expansion.
 - Reports are archived when someone opens them (Matomo's default, browser-triggered
   archiving). With a lot of traffic, a `core:archive` CronJob would be the next step.
+- **Switching Matomo off.** `enable: false` removes the APISIX route, the Ingress or
+  Gateway/HTTPRoute, Matomo, MariaDB and the backup job. The volumes, the Secrets
+  and the Keycloak client, flow and roles stay, so `enable: true` brings back the
+  same data. Delete the PVCs by hand to remove the data for good.
 
 <a id="matomo-keycloak"></a>
 

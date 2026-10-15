@@ -710,7 +710,7 @@
     - digital_energy_twin_matomo_backup_target == 'pvc'
     - digital_energy_twin_matomo_installed
 
-- name: "Digital Energy Twin: Remove Matomo backup job when disabled"
+- name: "Digital Energy Twin: Remove Matomo backup job while backups are off"
   kubernetes.core.k8s:
     state: absent
     api_version: batch/v1
@@ -2305,3 +2305,61 @@
     namespace: "{{ k8s_namespace }}"
     definition: "{{ lookup('template', addon_dir + 'templates/digital_energy_twin_matomo_svc.yaml.j2') | from_yaml }}"
   when: digital_energy_twin_matomo_enabled
+
+# matomo.enable: false takes Matomo offline. Volumes, Secrets and the Keycloak
+# setup stay, so enabling it again brings back the same data.
+- name: "Digital Energy Twin: Remove Matomo route when disabled"
+  ansible.builtin.uri:
+    method: DELETE
+    url: "https://api-admin.{{ DOMAIN }}/apisix/admin/{{ digital_energy_twin_matomo_apisix_object }}"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    headers:
+      Accept: application/json
+      X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
+    status_code:
+      - 200
+      - 404
+  loop:
+    - routes/digital-energy-twin-matomo-direct
+    - upstreams/digital-energy-twin-matomo-upstream
+  loop_control:
+    loop_var: digital_energy_twin_matomo_apisix_object
+  when: digital_energy_twin_enabled and not digital_energy_twin_matomo_requested
+
+- name: "Digital Energy Twin: Remove Matomo entry routing when disabled"
+  kubernetes.core.k8s:
+    state: absent
+    api_version: "{{ digital_energy_twin_matomo_route_object.api_version }}"
+    kind: "{{ digital_energy_twin_matomo_route_object.kind }}"
+    name: "{{ digital_energy_twin_matomo_route_object.name }}"
+    kubeconfig: "{{ K8S_KUBECONFIG_PATH }}/{{ inv_access.apisix.ns_kubeconfig }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ digital_energy_twin_apisix_namespace }}"
+  loop: >-
+    {{ [{'api_version': 'networking.k8s.io/v1', 'kind': 'Ingress', 'name': 'digital-energy-twin-matomo-host'}]
+    if digital_energy_twin_routing_mode == 'ingress' else
+    [{'api_version': 'gateway.networking.k8s.io/v1', 'kind': 'HTTPRoute', 'name': 'digital-energy-twin-matomo-host'},
+     {'api_version': 'gateway.networking.k8s.io/v1', 'kind': 'HTTPRoute', 'name': 'digital-energy-twin-matomo-host-redirect'},
+     {'api_version': 'gateway.networking.k8s.io/v1', 'kind': 'Gateway', 'name': 'digital-energy-twin-matomo-host'}] }}
+  loop_control:
+    loop_var: digital_energy_twin_matomo_route_object
+    label: "{{ digital_energy_twin_matomo_route_object.kind }}/{{ digital_energy_twin_matomo_route_object.name }}"
+  when: digital_energy_twin_enabled and not digital_energy_twin_matomo_requested
+
+- name: "Digital Energy Twin: Stop Matomo when disabled"
+  kubernetes.core.k8s:
+    state: absent
+    api_version: "{{ digital_energy_twin_matomo_workload.api_version }}"
+    kind: "{{ digital_energy_twin_matomo_workload.kind }}"
+    name: "{{ digital_energy_twin_matomo_workload.name }}"
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+  loop:
+    - {api_version: apps/v1, kind: Deployment, name: "{{ digital_energy_twin_matomo_name }}"}
+    - {api_version: batch/v1, kind: CronJob, name: "{{ digital_energy_twin_matomo_backup_name }}"}
+    - {api_version: apps/v1, kind: StatefulSet, name: "{{ digital_energy_twin_matomo_db_name }}"}
+  loop_control:
+    loop_var: digital_energy_twin_matomo_workload
+    label: "{{ digital_energy_twin_matomo_workload.kind }}/{{ digital_energy_twin_matomo_workload.name }}"
+  when: digital_energy_twin_enabled and not digital_energy_twin_matomo_requested

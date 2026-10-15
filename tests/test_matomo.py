@@ -66,7 +66,21 @@ class MatomoTests(unittest.TestCase):
             module = entry.get("kubernetes.core.k8s") or entry.get("ansible.builtin.uri") or {}
             if "matomo" in str(module).lower():
                 with self.subTest(task=entry["name"]):
-                    self.assertTrue(any("digital_energy_twin_matomo_enabled" in c for c in conditions(entry)))
+                    if entry["name"].endswith(" when disabled") and module.get("state", "absent") == "absent":
+                        # Clean-up runs only when Matomo is switched off, never while it is wanted.
+                        self.assertIn("not digital_energy_twin_matomo_requested", " ".join(conditions(entry)))
+                    else:
+                        self.assertTrue(any("digital_energy_twin_matomo_enabled" in c for c in conditions(entry)))
+
+    def test_disabling_removes_access_and_workloads_but_keeps_data(self):
+        removed = [item["kind"] for item in task("Stop Matomo when disabled")["loop"]]
+        self.assertEqual(removed, ["Deployment", "CronJob", "StatefulSet"])
+        self.assertEqual(task("Remove Matomo route when disabled")["loop"],
+                         ["routes/digital-energy-twin-matomo-direct", "upstreams/digital-energy-twin-matomo-upstream"])
+        for entry in TASKS:
+            if entry["name"].endswith(" when disabled") and entry.get("kubernetes.core.k8s"):
+                self.assertNotIn("PersistentVolumeClaim", str(entry))
+                self.assertNotIn("Secret", str(entry))
 
     def test_deployment_uses_the_digest_and_keeps_the_trusted_host_check(self):
         deployment = render("matomo_deploy")
@@ -249,7 +263,7 @@ class MatomoTests(unittest.TestCase):
 
     def test_backup_job_starts_only_after_installation(self):
         self.assertIn("digital_energy_twin_matomo_installed", conditions(task("Ensure Matomo backup job")))
-        removal = task("Remove Matomo backup job when disabled")
+        removal = task("Remove Matomo backup job while backups are off")
         self.assertEqual(removal["kubernetes.core.k8s"]["state"], "absent")
 
     def test_route_admits_only_allowed_networks_until_installed(self):
