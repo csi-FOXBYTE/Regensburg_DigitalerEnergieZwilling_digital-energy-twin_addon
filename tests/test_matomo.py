@@ -114,6 +114,17 @@ class MatomoTests(unittest.TestCase):
         self.assertLess(names.index("Digital Energy Twin: Ensure Matomo database and network rules"),
                         names.index("Digital Energy Twin: Ensure Matomo deployment"))
 
+    def test_client_switches_flows_only_after_verification(self):
+        names = [entry["name"].split(": ", 1)[1] for entry in TASKS]
+        order = ["Validate Matomo browser flow", "Update Matomo OIDC client and bind its browser flow",
+                 "Remove replaced Matomo browser flows"]
+        self.assertEqual([names.index(name) for name in order], sorted(names.index(name) for name in order))
+        self.assertNotIn("Refuse to replace a Matomo browser flow in use", names)
+        # A fresh admin token before the Keycloak tasks, which run after all APISIX tasks.
+        self.assertEqual(names.index("Refresh IDM settings for Matomo") + 1, names.index("Set Matomo Keycloak facts"))
+        removal = task("Remove replaced Matomo browser flows")
+        self.assertIn("rejectattr('id', 'equalto', digital_energy_twin_matomo_flow_id)", removal["loop"])
+
     def test_only_matomo_and_its_backup_reach_the_database(self):
         policy = render("matomo_db_netpol")
         self.assertEqual(policy["spec"]["podSelector"]["matchLabels"], {"app": "digital-energy-twin-matomo-db"})

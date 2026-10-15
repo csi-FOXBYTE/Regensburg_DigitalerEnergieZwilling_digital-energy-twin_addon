@@ -347,7 +347,7 @@ All in the addon namespace, unless noted:
 | PVC, CronJob | `digital-energy-twin-matomo-backup` | Nightly backups, see [Backups](#matomo-backups) |
 | Gateway/HTTPRoute or Ingress | `digital-energy-twin-matomo-host` | In the APISIX namespace, like the other hosts |
 | APISIX upstream and route | `digital-energy-twin-matomo-upstream`, `-direct` | `matomo.host` to Matomo; locked until installed |
-| Keycloak client, flow, roles | `matomo`, `matomo browser`, `matomoViewer`/`matomoAdmin` | See [Keycloak](#matomo-keycloak) |
+| Keycloak client, flow, roles | `matomo`, `matomo browser <hash>`, `matomoViewer`/`matomoAdmin` | See [Keycloak](#matomo-keycloak) |
 
 The Matomo volume is `ReadWriteOnce` and mounted read-write only by the Matomo
 pod. The backup job mounts only its `config/` directory, read-only, and runs on
@@ -414,7 +414,7 @@ like for the addon client:
 - Fails if the realm lets users edit their username ("Edit username" under
   *Realm settings > Login*). Matomo links Keycloak users to Matomo users by
   username, so a renamed account could take over another Matomo login.
-- Creates and verifies the browser flow `matomo browser`. Matomo's LoginOIDC
+- Creates and verifies the browser flow `matomo browser <hash>`. Matomo's LoginOIDC
   plugin cannot read roles, so this flow denies users without either role, also
   when they already have a Keycloak session:
 
@@ -433,16 +433,18 @@ like for the addon client:
       └─ Deny access            REQUIRED  "Kein Zugriff auf Matomo: …"
   ```
 
+  The subflows carry the same `<hash>`, a short hash of the expected structure.
   If the realm's browser flow uses other second factors (WebAuthn, X.509,
   conditional OTP by role), the addon stops: the Matomo flow would skip them.
-  If a previous run left an incomplete flow that no client uses, the addon
-  deletes and recreates it. If the flow bound to the `matomo` client was changed
-  by hand, the addon stops instead of overwriting it.
+  When the expected structure changes (e.g. the realm turns on OTP), or the flow
+  was changed by hand or left incomplete, the addon builds a new flow beside the
+  old one and verifies it. It switches the client to the new flow only then, and
+  removes the old flows afterwards. The client is never without the role gate.
 - Creates or updates the client `matomo`: confidential, standard flow only (no
   direct access grants, implicit flow, service account or device grant), redirect
   URI `https://<matomo.host>/index.php?module=LoginOIDC&action=callback&provider=oidc`,
   post-logout redirect URI `https://<matomo.host>/*`, default client scopes
-  `basic`, `profile` and `email`, and the browser flow override `matomo browser`.
+  `basic`, `profile` and `email`, and the browser flow override `matomo browser <hash>`.
   Its secret goes into the Secret `digital-energy-twin-matomo-oidc`; Matomo
   restarts when it changes.
 - **Checks the role gate by logging in.** A misspelled role name in the flow
