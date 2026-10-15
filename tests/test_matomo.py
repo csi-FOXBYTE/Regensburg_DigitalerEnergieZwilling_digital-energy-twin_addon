@@ -102,6 +102,18 @@ class MatomoTests(unittest.TestCase):
         env = {item["name"]: item for item in deployment["spec"]["template"]["spec"]["containers"][0]["env"]}
         self.assertEqual(env["MATOMO_OIDC_BACKCHANNEL_URL"]["value"], "http://keycloak.idm.svc:8080/realms/dez")
 
+    def test_only_apisix_reaches_matomo(self):
+        policy = render("matomo_netpol", digital_energy_twin_apisix_namespace="dev-access-stack")
+        self.assertEqual(policy["spec"]["podSelector"]["matchLabels"], {"app": "digital-energy-twin-matomo"})
+        self.assertEqual(policy["spec"]["ingress"], [{
+            "from": [{"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "dev-access-stack"}}}],
+            "ports": [{"protocol": "TCP", "port": 80}]}])
+        names = [entry["name"] for entry in TASKS]
+        # The rule exists before the Matomo pod can serve its installer.
+        self.assertIn("digital_energy_twin_matomo_netpol.yaml.j2", task("Ensure Matomo database and network rules")["loop"])
+        self.assertLess(names.index("Digital Energy Twin: Ensure Matomo database and network rules"),
+                        names.index("Digital Energy Twin: Ensure Matomo deployment"))
+
     def test_only_matomo_and_its_backup_reach_the_database(self):
         policy = render("matomo_db_netpol")
         self.assertEqual(policy["spec"]["podSelector"]["matchLabels"], {"app": "digital-energy-twin-matomo-db"})

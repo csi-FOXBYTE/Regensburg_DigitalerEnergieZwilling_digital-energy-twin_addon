@@ -1,0 +1,22 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: "{{ digital_energy_twin_matomo_name }}"
+  labels:
+    app: "{{ digital_energy_twin_matomo_name }}"
+spec:
+  podSelector:
+    matchLabels:
+      app: "{{ digital_energy_twin_matomo_name }}"
+  policyTypes:
+    - Ingress
+  ingress:
+    # Only through APISIX, where the install lock sits; no pod may reach the
+    # web installer directly.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: "{{ digital_energy_twin_apisix_namespace }}"
+      ports:
+        - protocol: TCP
+          port: 80

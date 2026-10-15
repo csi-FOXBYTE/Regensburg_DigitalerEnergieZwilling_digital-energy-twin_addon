@@ -341,6 +341,7 @@ All in the addon namespace, unless noted:
 | StatefulSet, Service | `digital-energy-twin-matomo-db` | MariaDB 11.8 (pinned by digest) |
 | PVC | `digital-energy-twin-matomo-db-data` | MariaDB data |
 | NetworkPolicy | `digital-energy-twin-matomo-db` | Only Matomo and its backup job reach MariaDB (if the CNI enforces policies) |
+| NetworkPolicy | `digital-energy-twin-matomo` | Only pods in the APISIX namespace reach Matomo, so nobody can bypass the install lock from inside the cluster (if the CNI enforces policies) |
 | Secret | `digital-energy-twin-matomo-db` | `password` and `root-password`, generated once and never changed by the addon |
 | Secret | `digital-energy-twin-matomo-oidc` | `client-secret` of the Keycloak client, mounted into Matomo as a file |
 | PVC, CronJob | `digital-energy-twin-matomo-backup` | Nightly backups, see [Backups](#matomo-backups) |
@@ -699,7 +700,9 @@ that need a real cluster at the first rollout:
   installer opens. If the allowed address also gets `403`, APISIX does not see
   the client address: set `install_trusted_proxies`.
 - If the CNI enforces NetworkPolicies, a pod other than Matomo cannot connect to
-  `digital-energy-twin-matomo-db:3306`.
+  `digital-energy-twin-matomo-db:3306`, and a pod outside the APISIX namespace
+  cannot reach the Matomo pod on port 80, while Matomo still turns ready and
+  APISIX still reaches it.
 - The playbook passes the Keycloak checks against the platform realm, and steps
   3 to 6 of the runbook work.
 - After step 8: with web analytics accepted in the public frontend, visits

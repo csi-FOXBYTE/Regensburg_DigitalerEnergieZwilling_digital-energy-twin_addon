@@ -665,7 +665,7 @@
     label: "{{ digital_energy_twin_matomo_pvc.name }}"
   when: digital_energy_twin_matomo_enabled
 
-- name: "Digital Energy Twin: Ensure Matomo database"
+- name: "Digital Energy Twin: Ensure Matomo database and network rules"
   kubernetes.core.k8s:
     state: present
     kubeconfig: "{{ k8s_config }}"
@@ -676,6 +676,8 @@
     - digital_energy_twin_matomo_db_svc.yaml.j2
     - digital_energy_twin_matomo_db_netpol.yaml.j2
     - digital_energy_twin_matomo_db_statefulset.yaml.j2
+    # Before Matomo starts, so the installer is never reachable around APISIX.
+    - digital_energy_twin_matomo_netpol.yaml.j2
   loop_control:
     loop_var: digital_energy_twin_matomo_db_template
   when: digital_energy_twin_matomo_enabled
