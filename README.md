@@ -427,6 +427,7 @@ like for the addon client:
   │       └─ matomo conditional otp      CONDITIONAL  (only if the realm's browser flow uses OTP)
   │           ├─ Condition - user configured  REQUIRED
   │           └─ OTP Form                REQUIRED
+  │           (if the realm demands OTP from everyone: OTP Form REQUIRED directly under matomo forms)
   └─ matomo role gate                    CONDITIONAL
       ├─ Condition - user role  REQUIRED  <client>.matomoViewer, negated
       ├─ Condition - user role  REQUIRED  <client>.matomoAdmin, negated

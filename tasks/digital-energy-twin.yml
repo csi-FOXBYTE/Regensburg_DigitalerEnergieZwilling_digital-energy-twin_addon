@@ -1698,13 +1698,20 @@
   register: digital_energy_twin_realm_browser_flow
   when: digital_energy_twin_matomo_enabled
 
-# The Matomo flow copies the realm's conditional OTP. Other second factors are
-# not copied; Matomo would then be reachable without them.
+# The Matomo flow copies the realm's OTP: conditional where the realm asks only
+# users who set it up, required where the realm demands it from everyone.
+# Other second factors are not copied; Matomo would then be reachable without them.
 - name: "Digital Energy Twin: Inspect second factors of the realm browser flow"
   ansible.builtin.set_fact:
     digital_energy_twin_matomo_flow_otp: >-
       {{ digital_energy_twin_realm_browser_flow.json | selectattr('providerId', 'defined')
       | selectattr('providerId', 'equalto', 'auth-otp-form') | rejectattr('requirement', 'equalto', 'DISABLED') | list | length > 0 }}
+    # Forced = an enabled OTP form without a CONDITIONAL step above it (steps come depth-first).
+    digital_energy_twin_matomo_flow_otp_forced: >-
+      {% set ns = namespace(forced=false) %}{% set above = {} %}{% for step in digital_energy_twin_realm_browser_flow.json %}{% set _ =
+      above.update({step.level: step.requirement}) %}{% if step.providerId | default('') == 'auth-otp-form' and step.requirement != 'DISABLED'
+      and range(step.level) | map('extract', above) | select('equalto', 'CONDITIONAL') | list | length == 0 %}{% set ns.forced =
+      true %}{% endif %}{% endfor %}{{ ns.forced }}
     digital_energy_twin_matomo_flow_uncopied: >-
       {{ digital_energy_twin_realm_browser_flow.json | selectattr('providerId', 'defined')
       | selectattr('providerId', 'in', ['webauthn-authenticator', 'webauthn-authenticator-passwordless', 'auth-conditional-otp-form', 'auth-x509-client-username-form'])
@@ -1734,10 +1741,12 @@
         {'parent': 'matomo authentication', 'level': 1, 'name': 'matomo forms', 'flow': true, 'requirement': 'ALTERNATIVE'},
         {'parent': 'matomo forms', 'level': 2, 'name': 'auth-username-password-form', 'flow': false, 'requirement': 'REQUIRED'},
       ] + ([
+        {'parent': 'matomo forms', 'level': 2, 'name': 'auth-otp-form', 'flow': false, 'requirement': 'REQUIRED'},
+      ] if digital_energy_twin_matomo_flow_otp_forced | bool else [
         {'parent': 'matomo forms', 'level': 2, 'name': 'matomo conditional otp', 'flow': true, 'requirement': 'CONDITIONAL'},
         {'parent': 'matomo conditional otp', 'level': 3, 'name': 'conditional-user-configured', 'flow': false, 'requirement': 'REQUIRED'},
         {'parent': 'matomo conditional otp', 'level': 3, 'name': 'auth-otp-form', 'flow': false, 'requirement': 'REQUIRED'},
-      ] if digital_energy_twin_matomo_flow_otp else []) + [
+      ] if digital_energy_twin_matomo_flow_otp | bool else []) + [
         {'parent': digital_energy_twin_matomo_flow_alias, 'level': 0, 'name': 'matomo role gate', 'flow': true, 'requirement': 'CONDITIONAL'},
         {'parent': 'matomo role gate', 'level': 1, 'name': 'conditional-user-role', 'flow': false, 'requirement': 'REQUIRED',
          'config': {'alias': digital_energy_twin_matomo_role_conditions[0].alias,
