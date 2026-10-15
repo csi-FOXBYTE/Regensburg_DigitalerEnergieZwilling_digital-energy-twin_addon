@@ -577,7 +577,10 @@ time zone) it writes to the PVC `digital-energy-twin-matomo-backup`, directory
 Files older than `backup.keep_days` (default 14) are deleted, but only after a
 new backup has succeeded. The job fails (non-zero exit code, failed Job in
 `kubectl -n NS get jobs`) if `mariadb-dump` fails, or if the dump is damaged,
-incomplete or contains no Matomo tables, or `config.ini.php` is missing.
+incomplete or contains no Matomo tables, or `config.ini.php` is missing. The job
+runs next to the Matomo pod; while Matomo is scaled to 0 it cannot start and fails
+after two hours. Suspend the CronJob for longer maintenance, as in the restore
+steps below.
 
 > **Limits.** The backup PVC is in the same cluster and usually on the same
 > storage as Matomo. It does not protect against losing the cluster or its

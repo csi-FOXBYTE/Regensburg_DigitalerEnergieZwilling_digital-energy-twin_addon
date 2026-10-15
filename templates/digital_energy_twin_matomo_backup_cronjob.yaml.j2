@@ -108,7 +108,7 @@ spec:
                   mv "$config.tmp" "$config"
                   # Old backups go only after a new one succeeded.
                   find "$target" -maxdepth 1 -type f \( -name 'matomo-db-*.sql.gz' -o -name 'matomo-config-*.ini.php' \) \
-                    -mtime +"$KEEP_DAYS" -print -delete
+                    -mmin +"$((KEEP_DAYS * 1440))" -print -delete
                   echo "backup written: $dump ($(stat -c %s "$dump") bytes), $config"
               volumeMounts:
                 - name: backup

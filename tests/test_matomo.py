@@ -172,7 +172,7 @@ class MatomoTests(unittest.TestCase):
                                                    "subPath": "config", "readOnly": True})
         script = backup["args"][0]
         for expected in ("set -euo pipefail", "--single-transaction", "--routines",
-                         "config.ini.php", '-mtime +"$KEEP_DAYS"'):
+                         "config.ini.php", '-mmin +"$((KEEP_DAYS * 1440))"'):
             self.assertIn(expected, script)
         self.assertEqual(pod["initContainers"][0]["securityContext"]["capabilities"]["add"], ["CHOWN"])
 
