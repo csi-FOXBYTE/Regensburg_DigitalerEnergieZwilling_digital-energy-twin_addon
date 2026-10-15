@@ -1,0 +1,112 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "version": 1,
+  "metadata": {
+    "component": {
+      "type": "application",
+      "name": "regensburg-web-matomo",
+      "version": "build-38746166333-1",
+      "bom-ref": "regensburg:matomo:build-38746166333-1",
+      "licenses": [
+        {
+          "expression": "GPL-3.0-or-later"
+        }
+      ],
+      "properties": [
+        {
+          "name": "vcs:commit",
+          "value": "9dfd20b0eea993d5948cab4068ccf6c6d2eb073a"
+        },
+        {
+          "name": "regensburg:build",
+          "value": "38746166333-1"
+        },
+        {
+          "name": "sbom:source-state",
+          "value": "pinned Git build context"
+        }
+      ]
+    },
+    "timestamp": "2026-10-15T13:45:40.000Z",
+    "properties": [
+      {
+        "name": "regensburg:release-source",
+        "value": "9dfd20b0eea993d5948cab4068ccf6c6d2eb073a"
+      },
+      {
+        "name": "regensburg:release-inventory",
+        "value": "Fresh inventory snapshot; licenses and copyrights have not been audited"
+      },
+      {
+        "name": "regensburg:image-digest",
+        "value": "sha256:af0684d7381aa0bd629cad0bed3046a3fe28a117a594d8e48b07073dbb1e90b7"
+      }
+    ]
+  },
+  "components": [
+    {
+      "type": "container",
+      "name": "matomo",
+      "version": "5.14.0-apache",
+      "bom-ref": "docker:matomo:5.14.0-apache",
+      "licenses": [
+        {
+          "expression": "GPL-3.0-or-later"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "1e00192627025a9eb9108858a0d2fcedb495958adf8ee12cd2b2e4ec306efae4"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "LoginOIDC",
+      "version": "5.0.0",
+      "bom-ref": "pkg:github/dominik-th/matomo-plugin-LoginOIDC@5.0.0",
+      "purl": "pkg:github/dominik-th/matomo-plugin-LoginOIDC@5.0.0",
+      "licenses": [
+        {
+          "expression": "GPL-3.0-or-later"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "265433ec2cc526b627e3bb124c76c3521309d2a8becce06db95d89ce65a60bb2"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://github.com/dominik-th/matomo-plugin-LoginOIDC/archive/refs/tags/5.0.0.tar.gz"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "NoPasswordReset",
+      "version": "1.1.0",
+      "bom-ref": "regensburg:matomo-plugin:NoPasswordReset@1.1.0",
+      "licenses": [
+        {
+          "expression": "GPL-3.0-or-later"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "regensburg:matomo:build-38746166333-1",
+      "dependsOn": [
+        "docker:matomo:5.14.0-apache",
+        "pkg:github/dominik-th/matomo-plugin-LoginOIDC@5.0.0",
+        "regensburg:matomo-plugin:NoPasswordReset@1.1.0"
+      ]
+    }
+  ],
+  "serialNumber": "urn:uuid:68d8fb34-9854-5c38-8e94-fee11ac6f4b0"
+}
