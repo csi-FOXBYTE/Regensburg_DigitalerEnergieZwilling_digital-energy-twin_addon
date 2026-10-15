@@ -107,7 +107,7 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -f vars/application_release.json && -f SBOM.cdx.json && -f SBOM.csv ]] \
-            && [[ -z "$(git status --porcelain -- sbom.config.json vars/application_release.json vars/software_references.yml sboms)" ]] \
+            && [[ -z "$(git status --porcelain -- sbom.config.json vars/application_release.json sboms)" ]] \
             && [[ "$(git log -1 --format=%s)" == "chore: release addon $ADDON_TAG" ]]; then
             echo "Selected release and its generated SBOM are already committed"
             exit 0
@@ -124,8 +124,9 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # vars/software_references.yml was removed with v1.7.3; naming it here fails git add.
           git add -A -- sbom.config.json vars/application_release.json \
-            vars/software_references.yml sboms SBOM.cdx.json SBOM.csv
+            sboms SBOM.cdx.json SBOM.csv
 
           if git show-ref --verify --quiet "refs/tags/$ADDON_TAG"; then
             if [[ "$(git rev-list -n 1 "$ADDON_TAG")" != "$(git rev-parse HEAD)" ]] \
