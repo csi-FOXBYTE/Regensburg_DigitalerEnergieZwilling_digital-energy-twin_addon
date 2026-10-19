@@ -50,9 +50,9 @@ v1.7.3 release is published and adopted. The **Release addon from application
 release** workflow then replaces that file with `vars/application_release.json`,
 containing the exact validated [monorepo release manifest](https://github.com/csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_MonoRepo).
 Deployment reads all `image@sha256:...` references from that one manifest and
-sets `APP_VERSION` on both static frontends from its `appVersion`. Releases up to
-v1.7.3 contain no `matomo` image; with such a release the addon skips Matomo and
-says so in the playbook output.
+sets `APP_VERSION` on both static frontends from its `appVersion`. The Matomo
+image is not part of the app release: the addon builds and pins it itself
+([Matomo image](#matomo-image)).
 
 Before deploying, choose the [database mode](#database), check
 [platform routing](#platform-routing), and prepare [S3 CORS](#s3-cors-for-map-data).
@@ -323,11 +323,9 @@ Namespace behavior:
 The addon can deploy Matomo for the Digital Energy Twin's web analytics. Users
 log in via the platform Keycloak; only users with the client role `matomoViewer`
 or `matomoAdmin` of the addon client get in. The image
-`ghcr.io/csi-foxbyte/regensburg-web-matomo` comes from the same monorepo release
-manifest as the other images and is deployed only by its digest. Releases up to
-v1.7.3 contain no Matomo image: with such a release, the addon skips Matomo and
-says so in the playbook output. The image itself is described in the monorepo
-under `images/matomo/README.md`.
+`ghcr.io/csi-foxbyte/regensburg-web-matomo` is built from this repository and
+deployed only by the digest pinned in `vars/matomo_image.json`; see
+[Matomo image](#matomo-image).
 
 Matomo is off by default. Switching it on takes one line in the inventory and
 two playbook runs with the web installer in between; see
@@ -342,9 +340,8 @@ Do these steps once per customer installation. `<domain>` is the inventory's
 
 **Before you start**
 
-- The add-on checkout on the Ansible host contains a release with Matomo
-  (v1.8.0 or later): `git log --oneline -1` in the add-on folder, and
-  `vars/application_release.json` lists `matomo`.
+- The add-on checkout on the Ansible host contains `vars/matomo_image.json`
+  (from v1.8.0 on). `git log --oneline -1` in the add-on folder shows the state.
 - `matomo.det.<domain>` resolves to the platform entry, like `det.<domain>`
   (a wildcard `*.det.<domain>` is enough).
 - Keycloak's realm (`inv_access.tenant.realm_name`) has "Edit username" off.
@@ -478,6 +475,37 @@ login; an already open Matomo session lasts until it expires.
 | `matomo-configure.sh`: "No password entered." or "Please specify a value for 'passwordConfirmation'" | The password was not pasted (in Windows PowerShell, Ctrl+V often does not paste into SSH). | Paste with a right-click; the script shows the number of characters it got. |
 | Matomo log: "Site content detection request … refused … private or reserved address" | Matomo tries to inspect the DEZ site for its "no data yet" page and refuses internal addresses. | Harmless; it stops once tracking data arrives. |
 | `--tags addon_digital-energy-twin` runs nothing | Civitas Core includes add-ons under the tags `addons`, `base` and `tenant` only. | Use `--tags addons`. |
+
+<a id="matomo-image"></a>
+
+### Matomo image
+
+The image is built from [images/matomo](images/matomo/README.md): the official
+`matomo:5.14.0-apache` image with the LoginOIDC and NoPasswordReset plugins and
+an entrypoint that writes the Keycloak settings. The app release does not
+contain it, so a Matomo change needs no app release.
+
+To build and deploy a new image, e.g. after changing `images/matomo` or for a
+newer Matomo base image:
+
+1. Merge the change into `main`.
+2. Start the workflow **Build Matomo image** on `main` (*Actions*). It builds
+   and pushes `ghcr.io/csi-foxbyte/regensburg-web-matomo:build-<run>`, with the
+   base images pinned by digest, and checks the SBOM inside the image. It then
+   commits the digest to `vars/matomo_image.json` and the SBOM to
+   `sboms/matomo.cdx.json` on `main`.
+3. Run the playbook. Matomo restarts with the new image; data and settings stay
+   on the volume.
+
+The workflow pushes with the repository's `GITHUB_TOKEN`. Once, an
+organization admin must give this repository write access to the package
+`regensburg-web-matomo` (package settings > *Manage Actions access*), because
+the package was created by the monorepo. The first pin is the image of app
+release v1.8.0, so switching to the addon-built image changes nothing until the
+workflow runs.
+
+Test the Keycloak login of an image locally with
+[images/matomo/sso-test](images/matomo/sso-test/README.md).
 
 ### What the addon creates
 
@@ -965,8 +993,9 @@ python3 -m venv .sbom-env
 .sbom-env/bin/python scripts/generate_sbom.py
 ```
 
-Container references come from `vars/application_release.json` after adoption;
-the current selection still comes from `vars/software_references.yml`.
+Container references come from `vars/application_release.json` after adoption
+(the current selection still comes from `vars/software_references.yml`), and
+Matomo's from `vars/matomo_image.json`.
 Update `sbom.config.json` whenever the addon's control-plane or platform
 integrations change; the generator fails if a new image key has no SBOM entry.
 Set `SBOM_REQUIRE_CHILD_BOMS=1` to require a verified child document for every selected image.
