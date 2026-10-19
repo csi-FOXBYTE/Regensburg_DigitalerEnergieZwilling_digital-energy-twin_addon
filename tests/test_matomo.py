@@ -18,6 +18,7 @@ ENV.filters["hash"] = lambda value, algorithm: hashlib.new(algorithm, value.enco
 ENV.filters["regex_replace"] = lambda value, pattern, replacement: re.sub(pattern, replacement, value)
 ENV.tests["match"] = lambda value, pattern: re.match(pattern, value) is not None
 ENV.tests["search"] = lambda value, pattern: re.search(pattern, value) is not None
+ENV.tests["skipped"] = lambda result: bool(result.get("skipped"))
 NAMES = {
     "digital_energy_twin_matomo_name": "digital-energy-twin-matomo",
     "digital_energy_twin_matomo_db_name": "digital-energy-twin-matomo-db",
@@ -228,6 +229,62 @@ class MatomoTests(unittest.TestCase):
         ):
             with self.subTest(expected=expected):
                 self.assertEqual(expression(digital_energy_twin_matomo_check_login={"results": results}), expected)
+
+    def test_internal_keycloak_url_is_found_and_used_only_with_the_public_issuer(self):
+        choose = task("Choose the internal Keycloak URL to check")["ansible.builtin.set_fact"]
+        candidate = ENV.from_string(choose["digital_energy_twin_matomo_keycloak_candidate"])
+        services = [
+            {"metadata": {"name": "idmkeycloak-headless", "namespace": "cc-loc-access-stack"},
+             "spec": {"clusterIP": "None", "ports": [{"name": "http", "port": 8080}]}},
+            {"metadata": {"name": "idmkeycloak", "namespace": "cc-loc-access-stack"},
+             "spec": {"clusterIP": "10.43.115.238", "ports": [{"name": "http", "port": 80}, {"name": "https", "port": 443}]}},
+        ]
+        for configured, found, expected in (
+            ("", services, "http://idmkeycloak.cc-loc-access-stack.svc.cluster.local"),
+            ("", [{"metadata": {"name": "keycloak", "namespace": "access"},
+                   "spec": {"clusterIP": "10.0.0.1", "ports": [{"name": "http", "port": 8080}]}}],
+             "http://keycloak.access.svc.cluster.local:8080"),
+            ("", [], ""),
+            ("http://kc.internal:8080/", services, "http://kc.internal:8080"),
+        ):
+            with self.subTest(configured=configured, services=len(found)):
+                self.assertEqual(candidate.render(digital_energy_twin_matomo_keycloak_internal_url=configured,
+                                                  digital_energy_twin_access_services={"resources": found}).strip(),
+                                 expected)
+
+        decide = task("Decide whether Matomo uses the internal Keycloak URL")
+        expression = ENV.from_string(decide["ansible.builtin.set_fact"]["digital_energy_twin_matomo_keycloak_internal_url"])
+        issuer = "https://idm.example.test/realms/dez"
+        url = "http://idmkeycloak.access.svc.cluster.local"
+        for configured, check, found_issuer, expected in (
+            ("", {"stdout": "..."}, issuer, url),                    # found, reports the public issuer
+            ("", {"stdout": "..."}, "http://idmkeycloak/realms/dez", ""),  # other issuer: public URL instead
+            ("", {"skipped": True}, "", ""),                         # nothing to check: public URL
+            (url, {"skipped": True}, "", url),                       # set by hand, cannot be checked: kept
+            (url, {"stdout": "..."}, "http://other", ""),            # set by hand, wrong issuer: the assert fails
+        ):
+            with self.subTest(configured=configured, check=check, issuer=found_issuer):
+                rendered = expression.render(
+                    digital_energy_twin_matomo_keycloak_candidate=url,
+                    digital_energy_twin_matomo_keycloak_internal_issuer=found_issuer,
+                    digital_energy_twin_matomo_oidc_issuer=issuer,
+                    digital_energy_twin_matomo_config={"keycloak_internal_url": configured},
+                    digital_energy_twin_matomo_keycloak_issuer_check=check)
+                self.assertEqual(rendered.strip(), expected)
+        names = [entry["name"] for entry in TASKS]
+        self.assertLess(names.index("Digital Energy Twin: Validate the configured internal Keycloak URL"),
+                        names.index("Digital Energy Twin: Get Matomo database credentials secret"))
+
+    def test_matomo_checks_keycloak_before_creating_anything(self):
+        names = [entry["name"].split(": ", 1)[1] for entry in TASKS]
+        first_resource = names.index("Get Matomo database credentials secret")
+        for check in ("Validate that users cannot change their username",
+                      "Validate that the Matomo flow keeps the realm's second factors",
+                      "Validate client scopes for Matomo"):
+            self.assertLess(names.index(check), first_resource)
+        # The main app is fully deployed before any Matomo step can stop the run.
+        self.assertLess(names.index("Upsert backend admin-api route (OIDC protected)"),
+                        names.index("Refresh IDM settings for Matomo"))
 
     def test_deployment_waits_for_the_keycloak_client_secret(self):
         names = [entry["name"] for entry in TASKS]
