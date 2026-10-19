@@ -273,6 +273,10 @@ class MatomoTests(unittest.TestCase):
                     digital_energy_twin_matomo_config={"keycloak_internal_url": configured},
                     digital_energy_twin_matomo_keycloak_issuer_check=check)
                 self.assertEqual(rendered.strip(), expected)
+        pods = task("Find a Keycloak pod to check the internal URL from")["kubernetes.core.k8s_info"]
+        selectors = ENV.from_string(pods["label_selectors"]).render(digital_energy_twin_matomo_keycloak_service={
+            "spec": {"selector": {"app": "idmkeycloak", "app.kubernetes.io/instance": "idm"}}})
+        self.assertEqual(yaml.safe_load(selectors), ["app=idmkeycloak", "app.kubernetes.io/instance=idm"])
         names = [entry["name"] for entry in TASKS]
         self.assertLess(names.index("Digital Energy Twin: Validate the configured internal Keycloak URL"),
                         names.index("Digital Energy Twin: Get Matomo database credentials secret"))

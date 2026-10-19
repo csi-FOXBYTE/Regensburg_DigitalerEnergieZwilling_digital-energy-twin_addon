@@ -1569,7 +1569,7 @@
   kubernetes.core.k8s_info:
     kind: Pod
     namespace: "{{ digital_energy_twin_matomo_keycloak_service.metadata.namespace }}"
-    label_selectors: "{{ digital_energy_twin_matomo_keycloak_service.spec.selector | dict2items | map('join', '=') | list }}"
+    label_selectors: "{{ digital_energy_twin_matomo_keycloak_service.spec.selector.items() | map('join', '=') | list }}"
     field_selectors:
       - status.phase=Running
     kubeconfig: "{{ k8s_config }}"
@@ -1600,6 +1600,7 @@
     digital_energy_twin_matomo_keycloak_discovery: >-
       {{ digital_energy_twin_matomo_keycloak_url.path | regex_replace('/+$', '') }}/realms/{{ inv_access.tenant.realm_name }}/.well-known/openid-configuration
   register: digital_energy_twin_matomo_keycloak_issuer_check
+  changed_when: false
   failed_when: false
   when:
     - digital_energy_twin_matomo_enabled
@@ -1628,7 +1629,7 @@
         or digital_energy_twin_matomo_keycloak_issuer_check is skipped
         or digital_energy_twin_matomo_keycloak_internal_url | length > 0
     fail_msg: >-
-      matomo.keycloak_internal_url ({{ digital_energy_twin_matomo_config.keycloak_internal_url }}) did not report
+      matomo.keycloak_internal_url ({{ digital_energy_twin_matomo_config.keycloak_internal_url | default('') }}) did not report
       the issuer {{ digital_energy_twin_matomo_oidc_issuer }} (got: '{{ digital_energy_twin_matomo_keycloak_internal_issuer }}').
       Correct the URL or remove it to let the add-on look for the Keycloak service itself.
   when: digital_energy_twin_matomo_enabled
@@ -2379,6 +2380,7 @@
       then echo installed; else echo not-installed; fi;
       if grep -q "^Plugins\[\] = \"LoginOIDC\"" "$f" 2>/dev/null; then echo oidc-active; fi'
   register: digital_energy_twin_matomo_state
+  changed_when: false
   failed_when: (digital_energy_twin_matomo_state.rc | default(digital_energy_twin_matomo_state.return_code | default(0))) | int != 0
   when: digital_energy_twin_matomo_enabled
 
