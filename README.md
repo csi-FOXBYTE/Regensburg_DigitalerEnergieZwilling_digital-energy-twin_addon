@@ -531,7 +531,10 @@ being prepared. Replace `NS` with the addon namespace and
    whose login is exactly their Keycloak username (lower case), with a random
    password nobody keeps, and give it *View* or *Admin* on the DEZ site. Their
    first Keycloak login links the accounts. Keycloak users without a Matomo user
-   are rejected by Matomo.
+   are rejected by Matomo ("User not found. OAuth registrations are disabled.").
+   If the realm uses the email address as username (*Realm settings > Login >
+   Email as username*, as on Civitas Core's local deployment), the Keycloak
+   username and therefore the Matomo login is the email address.
 
    ```bash
    LOGIN=jdoe EMAIL=jdoe@example.com ACCESS=view   # or admin

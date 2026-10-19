@@ -17,6 +17,7 @@ ENV.filters["combine"] = lambda *dicts: {key: value for d in dicts for key, valu
 ENV.filters["hash"] = lambda value, algorithm: hashlib.new(algorithm, value.encode()).hexdigest()
 ENV.filters["regex_replace"] = lambda value, pattern, replacement: re.sub(pattern, replacement, value)
 ENV.tests["match"] = lambda value, pattern: re.match(pattern, value) is not None
+ENV.tests["search"] = lambda value, pattern: re.search(pattern, value) is not None
 NAMES = {
     "digital_energy_twin_matomo_name": "digital-energy-twin-matomo",
     "digital_energy_twin_matomo_db_name": "digital-energy-twin-matomo-db",
@@ -206,6 +207,27 @@ class MatomoTests(unittest.TestCase):
         self.assertIn("Validate that Keycloak admits Matomo with a Matomo role", names)
         self.assertEqual([entry["name"].split(": ", 1)[1] for entry in check["always"]],
                          ["Delete temporary Matomo check users"])
+
+    def test_role_gate_check_logs_in_with_the_username_keycloak_stored(self):
+        check = task("Check the Matomo role gate with temporary users")["block"]
+        names = [entry["name"].split(": ", 1)[1] for entry in check]
+        self.assertLess(names.index("Read the usernames Keycloak gave the check users"),
+                        names.index("Log in as the check users"))
+        login = next(entry for entry in check if entry["name"].endswith("Log in as the check users"))
+        # Realms with the email as username replace the name the add-on chose.
+        self.assertIn(".json.username", login["ansible.builtin.uri"]["body"]["username"])
+        guard = next(entry for entry in check
+                     if entry["name"].endswith("Validate that the check users got past the login form"))
+        expression = ENV.compile_expression(guard["ansible.builtin.assert"]["that"][0].strip())
+        login_form = '<form id="kc-form-login" action="https://idm/realms/dez/login-actions/authenticate?x=1">'
+        deny_page = ('<p>Kein Zugriff auf Matomo</p>'
+                     '<a href="https://idm/realms/dez/login-actions/authenticate?restart=1">Back</a>')
+        for results, expected in (
+            ([{"status": 302, "content": ""}, {"status": 200, "content": deny_page}], True),
+            ([{"status": 200, "content": login_form}, {"status": 302, "content": ""}], False),
+        ):
+            with self.subTest(expected=expected):
+                self.assertEqual(expression(digital_energy_twin_matomo_check_login={"results": results}), expected)
 
     def test_deployment_waits_for_the_keycloak_client_secret(self):
         names = [entry["name"] for entry in TASKS]
