@@ -2,6 +2,7 @@
 
 import hashlib
 import re
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -345,6 +346,17 @@ class MatomoTests(unittest.TestCase):
         # installed is detected, never read from the inventory.
         defaults = task("Set Matomo defaults")["ansible.builtin.set_fact"]
         self.assertIs(defaults["digital_energy_twin_matomo_installed"], False)
+
+    def test_configure_script_is_valid_and_explains_itself(self):
+        script = ROOT / "scripts/matomo-configure.sh"
+        self.assertEqual(subprocess.run(["bash", "-n", str(script)]).returncode, 0)
+        usage = subprocess.run(["bash", str(script)], capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        self.assertEqual(usage.returncode, 2)
+        self.assertIn("Usage: scripts/matomo-configure.sh", usage.stderr)
+        text = script.read_text()
+        for setting in ("anonymizeIPEnable=1", "ipAddressMaskLength=4", "forceCookielessTracking=0",
+                        "providerId=disabled", "complianceType=cnil_v1"):
+            self.assertIn(setting, text)
 
     def test_deployment_waits_for_the_keycloak_client_secret(self):
         names = [entry["name"] for entry in TASKS]
