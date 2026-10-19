@@ -2204,6 +2204,23 @@
           Authorization: "Bearer {{ keycloak_login.json.access_token }}"
         status_code: 204
 
+    # Keycloak may replace the username, e.g. with the email in realms that use
+    # the email as username; log in with what it stored.
+    - name: "Digital Energy Twin: Read the usernames Keycloak gave the check users"
+      ansible.builtin.uri:
+        method: GET
+        url: "{{ digital_energy_twin_keycloak_realm_url }}/users/{{ digital_energy_twin_matomo_check_user.location | regex_search('[^/]+$') }}"
+        ca_path: "{{ inv_k8s.ingress.ca_path }}"
+        headers:
+          Accept: application/json
+          Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+        status_code: 200
+      register: digital_energy_twin_matomo_check_accounts
+      loop: "{{ digital_energy_twin_matomo_check_created.results }}"
+      loop_control:
+        loop_var: digital_energy_twin_matomo_check_user
+        label: "{{ digital_energy_twin_matomo_check_user.digital_energy_twin_matomo_check_user.username }}"
+
     - name: "Digital Energy Twin: Open the Matomo login page"
       ansible.builtin.uri:
         method: GET
@@ -2226,7 +2243,7 @@
         ca_path: "{{ inv_k8s.ingress.ca_path }}"
         body_format: form-urlencoded
         body:
-          username: "{{ digital_energy_twin_matomo_check_pair.1.username }}"
+          username: "{{ digital_energy_twin_matomo_check_pair.1.json.username }}"
           password: "{{ digital_energy_twin_matomo_check_password }}"
           credentialId: ""
         headers:
@@ -2240,11 +2257,25 @@
           - 401
           - 403
       register: digital_energy_twin_matomo_check_login
-      loop: "{{ digital_energy_twin_matomo_check_page.results | zip(digital_energy_twin_matomo_check_users) | list }}"
+      loop: "{{ digital_energy_twin_matomo_check_page.results | zip(digital_energy_twin_matomo_check_accounts.results) | list }}"
       loop_control:
         loop_var: digital_energy_twin_matomo_check_pair
-        label: "{{ digital_energy_twin_matomo_check_pair.1.username }}"
+        label: "{{ digital_energy_twin_matomo_check_pair.1.json.username }}"
       no_log: true
+
+    # Without a successful login the role gate was never reached; say so instead
+    # of reporting it as unsafe.
+    - name: "Digital Energy Twin: Validate that the check users got past the login form"
+      ansible.builtin.assert:
+        that:
+          - >-
+            digital_energy_twin_matomo_check_login.results | rejectattr('status', 'equalto', 302)
+            | map(attribute='content') | select('search', 'id=\"kc-form-login\"') | list | length == 0
+        fail_msg: >-
+          The temporary check users could not log in to realm '{{ inv_access.tenant.realm_name }}':
+          Keycloak showed its login form again, so the role gate was not tested. Check the realm's
+          password policy, required user attributes and brute-force detection, and the Keycloak log
+          for LOGIN_ERROR events of matomo-gate-check-* users.
 
     - name: "Digital Energy Twin: Validate that Keycloak denies Matomo without a Matomo role"
       ansible.builtin.assert:
