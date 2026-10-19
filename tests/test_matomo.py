@@ -322,6 +322,30 @@ class MatomoTests(unittest.TestCase):
         matomo = defaults["all"]["children"]["controller"]["vars"]["inv_addons"]["digital-energy-twin"]["matomo"]
         self.assertEqual(matomo, {"enable": False})
 
+    def test_installation_is_detected_after_the_deployment(self):
+        names = [entry["name"].split(": ", 1)[1] for entry in TASKS]
+        sequence = ["Ensure Matomo deployment", "Find the running Matomo pod", "Check whether Matomo is installed",
+                    "Remember whether Matomo is installed", "Activate the Keycloak login in Matomo",
+                    "Upsert Matomo direct-host route", "Ensure Matomo backup job"]
+        self.assertEqual([names.index(name) for name in sequence], sorted(names.index(name) for name in sequence))
+        deployment = task("Ensure Matomo deployment")["kubernetes.core.k8s"]
+        self.assertTrue(deployment["wait"])
+        remember = task("Remember whether Matomo is installed")["ansible.builtin.set_fact"]
+        for lines, installed, active in ((["not-installed"], False, False), (["installed"], True, False),
+                                         (["installed", "oidc-active"], True, True)):
+            with self.subTest(lines=lines):
+                state = {"stdout_lines": lines}
+                self.assertEqual(ENV.from_string(remember["digital_energy_twin_matomo_installed"])
+                                 .render(digital_energy_twin_matomo_state=state), str(installed))
+                self.assertEqual(ENV.from_string(remember["digital_energy_twin_matomo_oidc_active"])
+                                 .render(digital_energy_twin_matomo_state=state), str(active))
+        activation = task("Activate the Keycloak login in Matomo")
+        self.assertIn("plugin:activate LoginOIDC NoPasswordReset", activation["kubernetes.core.k8s_exec"]["command"])
+        self.assertIn("not digital_energy_twin_matomo_oidc_active", " ".join(conditions(activation)))
+        # installed is detected, never read from the inventory.
+        defaults = task("Set Matomo defaults")["ansible.builtin.set_fact"]
+        self.assertIs(defaults["digital_energy_twin_matomo_installed"], False)
+
     def test_deployment_waits_for_the_keycloak_client_secret(self):
         names = [entry["name"] for entry in TASKS]
         self.assertLess(names.index("Digital Energy Twin: Store Matomo OIDC client secret in addon namespace"),
@@ -330,12 +354,12 @@ class MatomoTests(unittest.TestCase):
         self.assertLess(names.index("Digital Energy Twin: Upsert backend admin-api route (OIDC protected)"),
                         names.index("Digital Energy Twin: Set Matomo Keycloak facts"))
 
-    def test_backend_tracking_stays_off_until_switched_on_after_installation(self):
+    def test_backend_tracking_stays_off_until_switched_on(self):
         tracking = task("Set Matomo defaults")["ansible.builtin.set_fact"]["digital_energy_twin_matomo_tracking"]
         image = NAMES["digital_energy_twin_matomo_image"]
         for config, matomo_image, expected in (
             ({"enable": True, "installed": True}, image, False),
-            ({"enable": True, "installed": False, "tracking_enabled": True}, image, False),
+            ({"enable": True, "tracking_enabled": True, "site_id": 1}, image, True),
             ({"enable": True, "installed": True, "tracking_enabled": True}, "", False),
             ({"enable": False, "installed": True, "tracking_enabled": True}, image, False),
             ({"enable": True, "installed": True, "tracking_enabled": True}, image, True),
@@ -348,8 +372,8 @@ class MatomoTests(unittest.TestCase):
         validation = task("Validate Matomo config")["ansible.builtin.assert"]["that"]
         for matomo, valid in (
             ({"tracking_enabled": True, "installed": True, "site_id": 3}, True),
-            ({"tracking_enabled": True, "installed": True}, False),
-            ({"tracking_enabled": True, "site_id": 3}, False),
+            ({"tracking_enabled": True}, False),
+            ({"tracking_enabled": True, "site_id": 3}, True),
             ({"site_id": "x"}, True),
         ):
             with self.subTest(matomo=matomo):

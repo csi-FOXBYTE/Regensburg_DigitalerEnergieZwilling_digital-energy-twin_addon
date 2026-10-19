@@ -176,7 +176,6 @@
       - digital_energy_twin.matomo.backup | default({}) is mapping
       - digital_energy_twin.matomo.backup.target | default('pvc') in ['pvc']
       - digital_energy_twin.matomo.backup.keep_days | default(14) | int > 0
-      - not (digital_energy_twin.matomo.tracking_enabled | default(false) | bool) or (digital_energy_twin.matomo.installed | default(false) | bool)
       - >-
         not (digital_energy_twin.matomo.tracking_enabled | default(false) | bool)
         or (digital_energy_twin.matomo.site_id | default('') | string) is match('^[1-9][0-9]*$')
@@ -184,8 +183,8 @@
       inv_addons['digital-energy-twin'].matomo must be a mapping. install_allowed_cidrs
       and install_trusted_proxies must be lists of CIDRs such as 192.0.2.10/32.
       backup.target must be pvc (the only target so far) and backup.keep_days a
-      positive number of days. tracking_enabled needs installed: true and the
-      numeric site_id of the DEZ website in Matomo.
+      positive number of days. tracking_enabled needs the numeric site_id of the
+      DEZ website in Matomo.
   when: digital_energy_twin.matomo is defined
 
 - name: "Digital Energy Twin: Validate selected application release"
@@ -269,7 +268,8 @@
       {{ digital_energy_twin_enabled and (digital_energy_twin_matomo_config.enable | default(false) | bool)
       and digital_energy_twin_matomo_image | length > 0 }}
     digital_energy_twin_matomo_host: "{{ digital_energy_twin_matomo_config.host | default('matomo.det.' ~ DOMAIN) }}"
-    digital_energy_twin_matomo_installed: "{{ digital_energy_twin_matomo_config.installed | default(false) | bool }}"
+    # Detected after the deployment ("Check whether Matomo is installed").
+    digital_energy_twin_matomo_installed: false
     digital_energy_twin_matomo_install_allowed_cidrs: "{{ digital_energy_twin_matomo_config.install_allowed_cidrs | default([]) }}"
     digital_energy_twin_matomo_install_trusted_proxies: "{{ digital_energy_twin_matomo_config.install_trusted_proxies | default([]) }}"
     digital_energy_twin_matomo_name: "digital-energy-twin-matomo"
@@ -295,7 +295,7 @@
     # Switch on only once section 12 of the privacy notice is complete for this customer.
     digital_energy_twin_matomo_tracking: >-
       {{ digital_energy_twin_enabled and (digital_energy_twin_matomo_config.enable | default(false) | bool)
-      and digital_energy_twin_matomo_image | length > 0 and (digital_energy_twin_matomo_config.installed | default(false) | bool)
+      and digital_energy_twin_matomo_image | length > 0
       and (digital_energy_twin_matomo_config.tracking_enabled | default(false) | bool) }}
     digital_energy_twin_matomo_site_id: "{{ digital_energy_twin_matomo_config.site_id | default('') | string }}"
     # Civitas Core backs up only PostgreSQL; the addon backs up Matomo itself.
@@ -2346,6 +2346,8 @@
     context: "{{ k8s_context }}"
     namespace: "{{ k8s_namespace }}"
     definition: "{{ lookup('template', addon_dir + 'templates/digital_energy_twin_matomo_deploy.yaml.j2') | from_yaml }}"
+    wait: true
+    wait_timeout: 600
   when: digital_energy_twin_matomo_enabled
 
 - name: "Digital Energy Twin: Ensure Matomo service"
@@ -2355,6 +2357,69 @@
     context: "{{ k8s_context }}"
     namespace: "{{ k8s_namespace }}"
     definition: "{{ lookup('template', addon_dir + 'templates/digital_energy_twin_matomo_svc.yaml.j2') | from_yaml }}"
+  when: digital_energy_twin_matomo_enabled
+
+- name: "Digital Energy Twin: Find the running Matomo pod"
+  kubernetes.core.k8s_info:
+    kind: Pod
+    namespace: "{{ k8s_namespace }}"
+    label_selectors:
+      - "app={{ digital_energy_twin_matomo_name }}"
+    field_selectors:
+      - status.phase=Running
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+  register: digital_energy_twin_matomo_pods
+  when: digital_energy_twin_matomo_enabled
+
+# Same rule as the image's entrypoint: installed once config.ini.php has its
+# database section and no "installation in progress" marker.
+- name: "Digital Energy Twin: Check whether Matomo is installed"
+  kubernetes.core.k8s_exec:
+    namespace: "{{ k8s_namespace }}"
+    pod: "{{ (digital_energy_twin_matomo_pods.resources | rejectattr('metadata.deletionTimestamp', 'defined') | first).metadata.name }}"
+    container: matomo
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    command: >-
+      sh -c 'f=/var/www/html/config/config.ini.php;
+      if grep -q "^\[database\]" "$f" 2>/dev/null && ! grep -q "^installation_in_progress" "$f";
+      then echo installed; else echo not-installed; fi;
+      if grep -q "^Plugins\[\] = \"LoginOIDC\"" "$f" 2>/dev/null; then echo oidc-active; fi'
+  register: digital_energy_twin_matomo_state
+  failed_when: (digital_energy_twin_matomo_state.rc | default(digital_energy_twin_matomo_state.return_code | default(0))) | int != 0
+  when: digital_energy_twin_matomo_enabled
+
+- name: "Digital Energy Twin: Remember whether Matomo is installed"
+  ansible.builtin.set_fact:
+    digital_energy_twin_matomo_installed: "{{ 'installed' in digital_energy_twin_matomo_state.stdout_lines }}"
+    digital_energy_twin_matomo_oidc_active: "{{ 'oidc-active' in digital_energy_twin_matomo_state.stdout_lines }}"
+  when: digital_energy_twin_matomo_enabled
+
+# The entrypoint activates the plugins only on start; right after the web
+# installer nobody restarts Matomo, so activate them in the running pod.
+- name: "Digital Energy Twin: Activate the Keycloak login in Matomo"
+  kubernetes.core.k8s_exec:
+    namespace: "{{ k8s_namespace }}"
+    pod: "{{ (digital_energy_twin_matomo_pods.resources | rejectattr('metadata.deletionTimestamp', 'defined') | first).metadata.name }}"
+    container: matomo
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    command: su -s /bin/bash www-data -c "cd /var/www/html && ./console plugin:activate LoginOIDC NoPasswordReset"
+  register: digital_energy_twin_matomo_activation
+  failed_when: (digital_energy_twin_matomo_activation.rc | default(digital_energy_twin_matomo_activation.return_code | default(0))) | int != 0
+  when: digital_energy_twin_matomo_enabled and digital_energy_twin_matomo_installed and not digital_energy_twin_matomo_oidc_active
+
+- name: "Digital Energy Twin: Report the Matomo installation"
+  ansible.builtin.debug:
+    msg: >-
+      {{ ('Matomo is installed; the Keycloak login is active'
+      ~ (' (activated now).' if digital_energy_twin_matomo_activation is not skipped else '.'))
+      if digital_energy_twin_matomo_installed else
+      ('Matomo is not installed yet. Run the web installer at https://' ~ digital_energy_twin_matomo_host
+      ~ ', then run the playbook again: it detects the installation and activates the Keycloak login.') }}
+      {{ 'matomo.installed in the inventory is no longer used and can be removed.'
+      if digital_energy_twin_matomo_config.installed is defined else '' }}
   when: digital_energy_twin_matomo_enabled
 
 - name: "Digital Energy Twin: Upsert APISIX upstream (matomo)"
