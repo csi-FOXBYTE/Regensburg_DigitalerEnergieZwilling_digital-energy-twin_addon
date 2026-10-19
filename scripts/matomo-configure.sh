@@ -45,7 +45,9 @@ api -d method=PrivacyManager.setAnonymizeIpSettings -d anonymizeIPEnable=1 -d ip
   -d useAnonymizedIpForVisitEnrichment=1 -d anonymizeUserId=1 -d anonymizeOrderId=1 \
   -d anonymizeReferrer=exclude_all -d forceCookielessTracking=0 -d randomizeConfigId=0
 api -d method=UserCountry.setLocationProvider -d providerId=disabled
-api -d method=PrivacyManager.setComplianceStatus -d "idSite=$SITE_ID" -d complianceType=cnil_v1 -d enforce=1
+# For all websites: the compliance page shows that scope by default, and a
+# policy enabled only for one site leaves it "non-compliant" there.
+api -d method=PrivacyManager.setComplianceStatus -d idSite=all -d complianceType=cnil_v1 -d enforce=1
 
 if [ $# -gt 0 ]; then
   echo '--- Matomo users (login = Keycloak username, random password nobody keeps)'

@@ -411,7 +411,10 @@ scripts/matomo-configure.sh https://matomo.det.<domain> jane.doe@example.org joh
 - It applies the privacy settings that section 12 of the privacy notice
   describes (IP addresses fully masked, also for enrichment; User ID and order
   ID anonymized; referrers not stored; geolocation off; compliance policy
-  `cnil_v1`; tracking cookies *not* disabled, which the DEZ tracker needs).
+  `cnil_v1` for all websites; tracking cookies *not* disabled, which the DEZ
+  tracker needs). *Administration > Privacy > Compliance* then shows every item
+  as compliant except "Opt-Out Configured", which stays "unknown": Matomo cannot
+  detect the DEZ consent dialog, which is the opt-out.
 - It creates a Matomo user for each login, with a random password nobody keeps,
   and gives it *View* on the DEZ site; `:admin` gives *Admin*. Run it again with
   more logins at any time; existing users are kept.
