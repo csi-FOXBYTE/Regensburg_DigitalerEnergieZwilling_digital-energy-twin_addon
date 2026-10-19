@@ -2,6 +2,7 @@
 
 import hashlib
 import re
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -18,6 +19,8 @@ ENV.filters["hash"] = lambda value, algorithm: hashlib.new(algorithm, value.enco
 ENV.filters["regex_replace"] = lambda value, pattern, replacement: re.sub(pattern, replacement, value)
 ENV.tests["match"] = lambda value, pattern: re.match(pattern, value) is not None
 ENV.tests["search"] = lambda value, pattern: re.search(pattern, value) is not None
+ENV.tests["skipped"] = lambda result: bool(result.get("skipped"))
+ENV.filters["difference"] = lambda values, other: [value for value in values if value not in other]
 NAMES = {
     "digital_energy_twin_matomo_name": "digital-energy-twin-matomo",
     "digital_energy_twin_matomo_db_name": "digital-energy-twin-matomo-db",
@@ -229,6 +232,136 @@ class MatomoTests(unittest.TestCase):
             with self.subTest(expected=expected):
                 self.assertEqual(expression(digital_energy_twin_matomo_check_login={"results": results}), expected)
 
+    def test_internal_keycloak_url_is_found_and_used_only_with_the_public_issuer(self):
+        choose = task("Choose the internal Keycloak URL to check")["ansible.builtin.set_fact"]
+        candidate = ENV.from_string(choose["digital_energy_twin_matomo_keycloak_candidate"])
+        services = [
+            {"metadata": {"name": "idmkeycloak-headless", "namespace": "cc-loc-access-stack"},
+             "spec": {"clusterIP": "None", "ports": [{"name": "http", "port": 8080}]}},
+            {"metadata": {"name": "idmkeycloak", "namespace": "cc-loc-access-stack"},
+             "spec": {"clusterIP": "10.43.115.238", "ports": [{"name": "http", "port": 80}, {"name": "https", "port": 443}]}},
+        ]
+        for configured, found, expected in (
+            ("", services, "http://idmkeycloak.cc-loc-access-stack.svc.cluster.local"),
+            ("", [{"metadata": {"name": "keycloak", "namespace": "access"},
+                   "spec": {"clusterIP": "10.0.0.1", "ports": [{"name": "http", "port": 8080}]}}],
+             "http://keycloak.access.svc.cluster.local:8080"),
+            ("", [], ""),
+            ("http://kc.internal:8080/", services, "http://kc.internal:8080"),
+        ):
+            with self.subTest(configured=configured, services=len(found)):
+                self.assertEqual(candidate.render(digital_energy_twin_matomo_keycloak_internal_url=configured,
+                                                  digital_energy_twin_access_services={"resources": found}).strip(),
+                                 expected)
+
+        decide = task("Decide whether Matomo uses the internal Keycloak URL")
+        expression = ENV.from_string(decide["ansible.builtin.set_fact"]["digital_energy_twin_matomo_keycloak_internal_url"])
+        issuer = "https://idm.example.test/realms/dez"
+        url = "http://idmkeycloak.access.svc.cluster.local"
+        for configured, check, found_issuer, expected in (
+            ("", {"stdout": "..."}, issuer, url),                    # found, reports the public issuer
+            ("", {"stdout": "..."}, "http://idmkeycloak/realms/dez", ""),  # other issuer: public URL instead
+            ("", {"skipped": True}, "", ""),                         # nothing to check: public URL
+            (url, {"skipped": True}, "", url),                       # set by hand, cannot be checked: kept
+            (url, {"stdout": "..."}, "http://other", ""),            # set by hand, wrong issuer: the assert fails
+        ):
+            with self.subTest(configured=configured, check=check, issuer=found_issuer):
+                rendered = expression.render(
+                    digital_energy_twin_matomo_keycloak_candidate=url,
+                    digital_energy_twin_matomo_keycloak_internal_issuer=found_issuer,
+                    digital_energy_twin_matomo_oidc_issuer=issuer,
+                    digital_energy_twin_matomo_config={"keycloak_internal_url": configured},
+                    digital_energy_twin_matomo_keycloak_issuer_check=check)
+                self.assertEqual(rendered.strip(), expected)
+        pods = task("Find a Keycloak pod to check the internal URL from")["kubernetes.core.k8s_info"]
+        selectors = ENV.from_string(pods["label_selectors"]).render(digital_energy_twin_matomo_keycloak_service={
+            "spec": {"selector": {"app": "idmkeycloak", "app.kubernetes.io/instance": "idm"}}})
+        self.assertEqual(yaml.safe_load(selectors), ["app=idmkeycloak", "app.kubernetes.io/instance=idm"])
+        names = [entry["name"] for entry in TASKS]
+        self.assertLess(names.index("Digital Energy Twin: Validate the configured internal Keycloak URL"),
+                        names.index("Digital Energy Twin: Get Matomo database credentials secret"))
+
+    def test_matomo_checks_keycloak_before_creating_anything(self):
+        names = [entry["name"].split(": ", 1)[1] for entry in TASKS]
+        first_resource = names.index("Get Matomo database credentials secret")
+        for check in ("Validate that users cannot change their username",
+                      "Validate that the Matomo flow keeps the realm's second factors",
+                      "Validate client scopes for Matomo"):
+            self.assertLess(names.index(check), first_resource)
+        # The main app is fully deployed before any Matomo step can stop the run.
+        self.assertLess(names.index("Upsert backend admin-api route (OIDC protected)"),
+                        names.index("Refresh IDM settings for Matomo"))
+
+    def test_misplaced_or_misspelled_matomo_settings_stop_the_run(self):
+        placement = task("Validate where the Matomo settings are")["ansible.builtin.assert"]["that"]
+        for context, valid in (
+            ({"inv_addons": {"digital-energy-twin": {"matomo": {}}}}, True),
+            ({"inv_addons": {}, "matomo": {"enable": True}}, False),           # one level too far left
+            ({"inv_addons": {"matomo": {"enable": True}}}, False),             # next to the add-on
+        ):
+            with self.subTest(context=context):
+                self.assertEqual(all(ENV.compile_expression(condition)(**context) for condition in placement), valid)
+
+        names = task("Validate the Matomo setting names")
+        unknown = ENV.from_string(names["vars"]["digital_energy_twin_matomo_unknown_settings"])
+        known = {key: names["vars"][key] for key in ("digital_energy_twin_matomo_known_settings",
+                                                       "digital_energy_twin_matomo_known_backup_settings")}
+        conditions = names["ansible.builtin.assert"]["that"]
+        for matomo, expected_unknown, valid in (
+            ({"enable": True}, [], True),
+            ({"enable": True, "instaled": True}, ["instaled"], False),
+            ({"enable": True, "backup": {"keep_day": 7}}, ["backup.keep_day"], False),
+            ({"enable": "true"}, [], False),                                   # a string, not a boolean
+            ({"enable": True, "tracking_enabled": False, "site_id": 1, "backup": {"keep_days": 7}}, [], True),
+        ):
+            with self.subTest(matomo=matomo):
+                found = yaml.safe_load(unknown.render(digital_energy_twin={"matomo": matomo}, **known))
+                self.assertEqual(found, expected_unknown)
+                result = all(ENV.compile_expression(condition)(
+                    digital_energy_twin={"matomo": matomo}, digital_energy_twin_matomo_unknown_settings=found)
+                    for condition in conditions)
+                self.assertEqual(result, valid)
+
+    def test_default_inventory_ships_matomo_switched_off(self):
+        defaults = yaml.safe_load((ROOT / "default_inventory.yml").read_text())
+        matomo = defaults["all"]["children"]["controller"]["vars"]["inv_addons"]["digital-energy-twin"]["matomo"]
+        self.assertEqual(matomo, {"enable": False})
+
+    def test_installation_is_detected_after_the_deployment(self):
+        names = [entry["name"].split(": ", 1)[1] for entry in TASKS]
+        sequence = ["Ensure Matomo deployment", "Find the running Matomo pod", "Check whether Matomo is installed",
+                    "Remember whether Matomo is installed", "Activate the Keycloak login in Matomo",
+                    "Upsert Matomo direct-host route", "Ensure Matomo backup job"]
+        self.assertEqual([names.index(name) for name in sequence], sorted(names.index(name) for name in sequence))
+        deployment = task("Ensure Matomo deployment")["kubernetes.core.k8s"]
+        self.assertTrue(deployment["wait"])
+        remember = task("Remember whether Matomo is installed")["ansible.builtin.set_fact"]
+        for lines, installed, active in ((["not-installed"], False, False), (["installed"], True, False),
+                                         (["installed", "oidc-active"], True, True)):
+            with self.subTest(lines=lines):
+                state = {"stdout_lines": lines}
+                self.assertEqual(ENV.from_string(remember["digital_energy_twin_matomo_installed"])
+                                 .render(digital_energy_twin_matomo_state=state), str(installed))
+                self.assertEqual(ENV.from_string(remember["digital_energy_twin_matomo_oidc_active"])
+                                 .render(digital_energy_twin_matomo_state=state), str(active))
+        activation = task("Activate the Keycloak login in Matomo")
+        self.assertIn("plugin:activate LoginOIDC NoPasswordReset", activation["kubernetes.core.k8s_exec"]["command"])
+        self.assertIn("not digital_energy_twin_matomo_oidc_active", " ".join(conditions(activation)))
+        # installed is detected, never read from the inventory.
+        defaults = task("Set Matomo defaults")["ansible.builtin.set_fact"]
+        self.assertIs(defaults["digital_energy_twin_matomo_installed"], False)
+
+    def test_configure_script_is_valid_and_explains_itself(self):
+        script = ROOT / "scripts/matomo-configure.sh"
+        self.assertEqual(subprocess.run(["bash", "-n", str(script)]).returncode, 0)
+        usage = subprocess.run(["bash", str(script)], capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        self.assertEqual(usage.returncode, 2)
+        self.assertIn("Usage: scripts/matomo-configure.sh", usage.stderr)
+        text = script.read_text()
+        for setting in ("anonymizeIPEnable=1", "ipAddressMaskLength=4", "forceCookielessTracking=0",
+                        "providerId=disabled", "complianceType=cnil_v1"):
+            self.assertIn(setting, text)
+
     def test_deployment_waits_for_the_keycloak_client_secret(self):
         names = [entry["name"] for entry in TASKS]
         self.assertLess(names.index("Digital Energy Twin: Store Matomo OIDC client secret in addon namespace"),
@@ -237,12 +370,12 @@ class MatomoTests(unittest.TestCase):
         self.assertLess(names.index("Digital Energy Twin: Upsert backend admin-api route (OIDC protected)"),
                         names.index("Digital Energy Twin: Set Matomo Keycloak facts"))
 
-    def test_backend_tracking_stays_off_until_switched_on_after_installation(self):
+    def test_backend_tracking_stays_off_until_switched_on(self):
         tracking = task("Set Matomo defaults")["ansible.builtin.set_fact"]["digital_energy_twin_matomo_tracking"]
         image = NAMES["digital_energy_twin_matomo_image"]
         for config, matomo_image, expected in (
             ({"enable": True, "installed": True}, image, False),
-            ({"enable": True, "installed": False, "tracking_enabled": True}, image, False),
+            ({"enable": True, "tracking_enabled": True, "site_id": 1}, image, True),
             ({"enable": True, "installed": True, "tracking_enabled": True}, "", False),
             ({"enable": False, "installed": True, "tracking_enabled": True}, image, False),
             ({"enable": True, "installed": True, "tracking_enabled": True}, image, True),
@@ -255,8 +388,8 @@ class MatomoTests(unittest.TestCase):
         validation = task("Validate Matomo config")["ansible.builtin.assert"]["that"]
         for matomo, valid in (
             ({"tracking_enabled": True, "installed": True, "site_id": 3}, True),
-            ({"tracking_enabled": True, "installed": True}, False),
-            ({"tracking_enabled": True, "site_id": 3}, False),
+            ({"tracking_enabled": True}, False),
+            ({"tracking_enabled": True, "site_id": 3}, True),
             ({"site_id": "x"}, True),
         ):
             with self.subTest(matomo=matomo):
@@ -288,26 +421,35 @@ class MatomoTests(unittest.TestCase):
         removal = task("Remove Matomo backup job while backups are off")
         self.assertEqual(removal["kubernetes.core.k8s"]["state"], "absent")
 
-    def test_route_admits_only_allowed_networks_until_installed(self):
+    def test_route_admits_only_the_install_link_until_installed(self):
         route = task("Upsert Matomo direct-host route")
-        expression = route["ansible.builtin.uri"]["body"]["plugins"].strip()[2:-2]
-        context = {"digital_energy_twin_matomo_install_lock": {"ip-restriction": {}},
-                   "digital_energy_twin_matomo_real_ip": {"real-ip": {}},
-                   "digital_energy_twin_matomo_deny_all": {"serverless-pre-function": {}}}
-        evaluate = ENV.compile_expression(expression)
-        for installed, cidrs, proxies, expected in (
-            (True, ["192.0.2.10/32"], [], {}),
-            (False, ["192.0.2.10/32"], [], {"ip-restriction": {}}),
-            (False, ["192.0.2.10/32"], ["10.0.0.0/8"], {"ip-restriction": {}, "real-ip": {}}),
-            (False, [], [], {"serverless-pre-function": {}}),
-        ):
-            with self.subTest(installed=installed, cidrs=cidrs, proxies=proxies):
-                self.assertEqual(evaluate(**context, digital_energy_twin_matomo_installed=installed,
-                                          digital_energy_twin_matomo_install_allowed_cidrs=cidrs,
-                                          digital_energy_twin_matomo_install_trusted_proxies=proxies), expected)
-        self.assertEqual(route["vars"]["digital_energy_twin_matomo_install_lock"]["ip-restriction"]["whitelist"],
-                         "{{ digital_energy_twin_matomo_install_allowed_cidrs }}")
+        evaluate = ENV.compile_expression(route["ansible.builtin.uri"]["body"]["plugins"].strip()[2:-2])
+        lock = {"serverless-pre-function": {}}
+        self.assertEqual(evaluate(digital_energy_twin_matomo_installed=True,
+                                  digital_energy_twin_matomo_install_lock=lock), {})
+        self.assertEqual(evaluate(digital_energy_twin_matomo_installed=False,
+                                  digital_energy_twin_matomo_install_lock=lock), lock)
+        plugin = route["vars"]["digital_energy_twin_matomo_install_lock"]["serverless-pre-function"]
+        self.assertEqual(plugin["phase"], "rewrite")
+        lua = ENV.from_string(plugin["functions"][0]).render(digital_energy_twin_matomo_install_token="T0ken")
+        for expected in ('local token = "T0ken"', 'ngx.req.get_uri_args()["install"] == token',
+                         "HttpOnly", "Secure", "SameSite=Lax", 'ngx.redirect("/", 302)', "ngx.exit(403)"):
+            self.assertIn(expected, lua)
 
+    def test_install_token_exists_only_while_matomo_is_not_installed(self):
+        create = task("Create the Matomo install token once")
+        self.assertIn("not digital_energy_twin_matomo_installed", create["when"])
+        self.assertIn("resources | length == 0", create["when"])
+        self.assertTrue(create["no_log"])
+        removal = task("Remove the Matomo install token after the installation")
+        self.assertEqual(removal["kubernetes.core.k8s"]["state"], "absent")
+        self.assertIn("digital_energy_twin_matomo_installed", " ".join(conditions(removal)))
+        names = [entry["name"].split(": ", 1)[1] for entry in TASKS]
+        sequence = ["Remember whether Matomo is installed", "Read the Matomo install token",
+                    "Upsert Matomo direct-host route", "Report the Matomo installation"]
+        self.assertEqual([names.index(name) for name in sequence], sorted(names.index(name) for name in sequence))
+        report = task("Report the Matomo installation")["ansible.builtin.debug"]["msg"]
+        self.assertIn("/?install=", report)
 
 if __name__ == "__main__":
     unittest.main()

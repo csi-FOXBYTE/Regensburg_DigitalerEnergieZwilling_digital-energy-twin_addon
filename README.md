@@ -59,11 +59,10 @@ Before deploying, choose the [database mode](#database), check
 
 ## Execute
 
-Run the normal Civitas Core playbook. To run addon tasks explicitly, use one of
-these tags:
-
-- `addons` for all configured addons
-- `addon_digital-energy-twin` for this addon only
+Run the normal Civitas Core playbook. To run only the add-ons, use the tag
+`addons`; it runs all add-ons listed in `inv_addons.addons`. Civitas Core
+includes add-ons under the tags `addons`, `base` and `tenant` only, so the
+add-on's own tag `addon_digital-energy-twin` alone runs nothing there.
 
 The optional [deploy script](#deploy-script) runs the playbook through your Ansible host.
 
@@ -330,6 +329,151 @@ v1.7.3 contain no Matomo image: with such a release, the addon skips Matomo and
 says so in the playbook output. The image itself is described in the monorepo
 under `images/matomo/README.md`.
 
+Matomo is off by default. Switching it on takes one line in the inventory and
+two playbook runs with the web installer in between; see
+[Deploying Matomo](#deploying-matomo).
+
+<a id="deploying-matomo"></a>
+
+### Deploying Matomo
+
+Do these steps once per customer installation. `<domain>` is the inventory's
+`DOMAIN`, `NS` the addon namespace (`ns_name`).
+
+**Before you start**
+
+- The add-on checkout on the Ansible host contains a release with Matomo
+  (v1.8.0 or later): `git log --oneline -1` in the add-on folder, and
+  `vars/application_release.json` lists `matomo`.
+- `matomo.det.<domain>` resolves to the platform entry, like `det.<domain>`
+  (a wildcard `*.det.<domain>` is enough).
+- Keycloak's realm (`inv_access.tenant.realm_name`) has "Edit username" off.
+  The playbook checks this and the other Keycloak requirements itself and stops
+  with a clear message before it creates anything.
+
+**1. Switch Matomo on.** In the customer inventory, add one line block under
+`inv_addons.digital-energy-twin`, at the same indentation as `public_host`:
+
+```yaml
+        inv_addons:
+          digital-energy-twin:
+            public_host: "det.{{ DOMAIN }}"
+            # ... the other settings ...
+            matomo:
+              enable: true
+```
+
+All other Matomo settings have working defaults ([settings](#matomo-settings)).
+A `matomo` block at the wrong indentation, an unknown setting name or
+`enable: "true"` in quotes stops the playbook with a message that says what to
+fix.
+
+**2. Run the playbook.** With Civitas Core's playbook and `--tags addons`
+(`TAGS=addons` for the [deploy script](#deploy-script)). This runs all add-ons in
+`inv_addons.addons`. The run creates MariaDB, Matomo, the Keycloak client and
+role check, and a locked route. At the end it prints:
+
+```text
+Matomo is not installed yet. Install it now through this one-time link:
+https://matomo.det.<domain>/?install=<token> . Everyone else gets 403 until then.
+```
+
+**3. Install Matomo through that link.** Open it in a browser: it sets a cookie
+and opens the web installer; everyone without the link gets `403`. In the
+installer:
+
+| Step | Enter |
+| --- | --- |
+| System check | Warnings are fine; errors are not. |
+| Database setup | Prefilled; change nothing. |
+| Superuser | Login **`matomo-breakglass`** (never a possible Keycloak username), a strong password (`openssl rand -base64 24`), your email address. Put the password in the customer inventory's Ansible Vault right away. |
+| Website | Name `DEZ`, URL: select `https://` in the dropdown and type `det.<domain>` without `https://`. Time zone `Berlin`. |
+| Tracking code | Skip: the DEZ frontend has its own tracker. |
+
+Then log in with `matomo-breakglass` through the password form and turn on
+two-factor authentication (*Administration > Personal > Security*).
+`matomo-breakglass` always logs in with its password: Matomo does not let
+superusers log in via Keycloak.
+
+**4. Run the playbook again.** It detects the installation, activates the
+Keycloak login in the running Matomo (no restart), opens the route for everyone,
+removes the install link and creates the nightly backup job. It prints
+`Matomo is installed; the Keycloak login is active`. The Matomo login page now
+shows a **Keycloak** button.
+
+**5. Apply the privacy settings and create Matomo users.** From any machine that
+reaches Matomo, with the break-glass password:
+
+```bash
+scripts/matomo-configure.sh https://matomo.det.<domain> jane.doe@example.org john.roe@example.org:admin
+```
+
+- It applies the privacy settings that section 12 of the privacy notice
+  describes (IP addresses fully masked, also for enrichment; User ID and order
+  ID anonymized; referrers not stored; geolocation off; compliance policy
+  `cnil_v1` for all websites; tracking cookies *not* disabled, which the DEZ
+  tracker needs). *Administration > Privacy > Compliance* then shows every item
+  as compliant except "Opt-Out Configured", which stays "unknown": Matomo cannot
+  detect the DEZ consent dialog, which is the opt-out.
+- It creates a Matomo user for each login, with a random password nobody keeps,
+  and gives it *View* on the DEZ site; `:admin` gives *Admin*. Run it again with
+  more logins at any time; existing users are kept.
+- **The login must be exactly the person's Keycloak username.** In realms that
+  use the email address as username (*Realm settings > Login > Email as
+  username*, as on Civitas Core's local deployment), that is the email address.
+- Without logins it only applies the privacy settings.
+
+**6. Grant access in Keycloak.** Assign `matomoViewer` or `matomoAdmin` of the
+addon client to each person, like the other addon roles
+([Grant access in Keycloak](#grant-access-in-keycloak)). A person needs both the
+role and a Matomo user.
+
+**7. Check once in the browser**, each in a new private window:
+
+| Test | Expected |
+| --- | --- |
+| Keycloak button, a person with role and Matomo user | Lands in Matomo and sees the DEZ site. |
+| Keycloak button, a person without either role | Keycloak shows "Kein Zugriff auf Matomo: …" and does not return to Matomo. |
+| *Lost your password?* with any Matomo login | Refused: the password reset is disabled while Matomo uses Keycloak. |
+
+The playbook checks the role gate on every run as well, with two temporary
+users (see [Keycloak](#matomo-keycloak)).
+
+**8. Tracking**, only once section 12 of the privacy notice is complete for this
+installation: add `tracking_enabled: true` and `site_id: 1` (the website ID from
+the installer) to the `matomo` block and run the playbook. The backend then gets
+`MATOMO_URL` and `MATOMO_SITE_ID`, and the public frontend offers web analytics
+in its privacy dialog. `https://det.<domain>/api/public/analytics-config`
+shows the active setting (`{"matomo":null}` while it is off). Visits appear in
+Matomo under *Visitors > Overview*; the visits log stays empty on purpose, because
+the `cnil_v1` policy turns it off.
+
+**When someone leaves**, remove their Keycloak role and their Matomo user
+(*Administration > System > Users*). The Keycloak role check blocks their next
+login; an already open Matomo session lasts until it expires.
+
+<a id="matomo-troubleshooting"></a>
+
+### Troubleshooting
+
+| What you see | Cause | Fix |
+| --- | --- | --- |
+| Playbook: "Found a 'matomo' block outside inv_addons['digital-energy-twin']" | The block is indented too little. That can also pull the next block (e.g. `rustfs`) out of `inv_addons`. | Indent `matomo:` like `public_host`; check the blocks after it. |
+| Playbook: "Unknown Matomo settings: …" | A misspelled setting, or `enable` in quotes. | Use the names from [settings](#matomo-settings); write `true`/`false` without quotes. |
+| Playbook: "Not used any more and can be removed …: matomo.installed …" | Settings from add-on v1.8.0. | Remove them; the add-on detects the installation and uses an install link. |
+| Playbook: "Realm … lets users edit their username" | "Edit username" is on in the realm. | Turn it off (*Realm settings > Login*) and run again. |
+| Playbook: "The realm browser flow … uses webauthn-authenticator …" | The realm uses a second factor the Matomo flow does not copy. | The Matomo flow would skip it; extend the add-on first. |
+| Playbook: "The temporary check users could not log in …" | Keycloak refused the role check's test users at the password step (password policy, required user fields, brute-force lockout). | Look for `LOGIN_ERROR` events of `matomo-gate-check-*` users in the Keycloak log. Matomo is not opened until this passes. |
+| Playbook: "SECURITY: a Keycloak user without matomoViewer or matomoAdmin was not denied" | The role check in Keycloak does not work; often a wrong role name (Keycloak logs "Invalid role name submitted"). | Do not let anyone use Matomo until this passes. |
+| Playbook: "matomo.keycloak_internal_url … did not report the issuer …" | The internal Keycloak URL set in the inventory is wrong. | Correct it, or remove it and let the add-on find the service. |
+| Browser: "Matomo is not installed yet. Open the install link …" (403) | Matomo is not installed and the browser has no install cookie. | Use the link from the playbook output; a new run prints it again. |
+| Matomo: "User not found. OAuth registrations are disabled." | Keycloak let the person in, but Matomo has no user with that login. | Create it with `scripts/matomo-configure.sh`, with the exact Keycloak username. |
+| The Keycloak login fails after the Keycloak page, e.g. a Matomo error about the token | Matomo cannot reach Keycloak's token endpoint (no hairpin routing, or a platform CA Matomo does not trust). | Set `matomo.keycloak_internal_url` to Keycloak's service URL. The playbook output says which URL Matomo uses. |
+| No **Keycloak** button on the login page | Matomo is not detected as installed yet, or the second run did not happen. | Run the playbook again after the installer. |
+| `matomo-configure.sh`: "No password entered." or "Please specify a value for 'passwordConfirmation'" | The password was not pasted (in Windows PowerShell, Ctrl+V often does not paste into SSH). | Paste with a right-click; the script shows the number of characters it got. |
+| Matomo log: "Site content detection request … refused … private or reserved address" | Matomo tries to inspect the DEZ site for its "no data yet" page and refuses internal addresses. | Harmless; it stops once tracking data arrives. |
+| `--tags addon_digital-energy-twin` runs nothing | Civitas Core includes add-ons under the tags `addons`, `base` and `tenant` only. | Use `--tags addons`. |
+
 ### What the addon creates
 
 All in the addon namespace, unless noted:
@@ -344,6 +488,7 @@ All in the addon namespace, unless noted:
 | NetworkPolicy | `digital-energy-twin-matomo` | Only pods in the APISIX namespace reach Matomo, so nobody can bypass the install lock from inside the cluster (if the CNI enforces policies) |
 | Secret | `digital-energy-twin-matomo-db` | `password` and `root-password`, generated once and never changed by the addon |
 | Secret | `digital-energy-twin-matomo-oidc` | `client-secret` of the Keycloak client, mounted into Matomo as a file |
+| Secret | `digital-energy-twin-matomo-install` | The install link's token; exists only until Matomo is installed |
 | PVC, CronJob | `digital-energy-twin-matomo-backup` | Nightly backups, see [Backups](#matomo-backups) |
 | Gateway/HTTPRoute or Ingress | `digital-energy-twin-matomo-host` | In the APISIX namespace, like the other hosts |
 | APISIX upstream and route | `digital-energy-twin-matomo-upstream`, `-direct` | `matomo.host` to Matomo; locked until installed |
@@ -355,48 +500,41 @@ the same node. Kubernetes itself does not stop other pods in the namespace from
 mounting the volume: keep it that way through namespace RBAC and do not mount it
 in other workloads.
 
-### Configuration
+<a id="matomo-settings"></a>
 
-```yaml
-inv_addons:
-  digital-energy-twin:
-    matomo:
-      enable: true
-      host: "matomo.det.{{ DOMAIN }}"        # Default.
-      installed: false                      # Set to true after the web installer.
-      install_allowed_cidrs: ["192.0.2.10/32"]
-      install_trusted_proxies: []           # See below.
-      # keycloak_internal_url: "http://keycloak.<namespace>.svc.cluster.local:8080"
-      storage_class: ""                     # Empty: the cluster's default StorageClass.
-      data_size: "5Gi"
-      db_size: "10Gi"
-      tracking_enabled: false               # See step 8 of the runbook.
-      site_id: 1
-      backup:
-        enable: true
-        target: pvc                         # The only target so far.
-        schedule: "30 2 * * *"
-        keep_days: 14
-        size: "10Gi"
-```
+### Settings
+
+Under `inv_addons.digital-energy-twin.matomo`; only `enable` is needed:
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `enable` | `false` | Deploys Matomo. `false` takes it offline again (see below). |
+| `host` | `matomo.det.{{ DOMAIN }}` | Matomo's hostname. |
+| `keycloak_internal_url` | found automatically | Keycloak's internal service URL, e.g. `http://idmkeycloak.<ns>.svc.cluster.local`. See below. |
+| `tracking_enabled` | `false` | Web analytics in the public frontend; only once section 12 of the privacy notice is complete. Needs `site_id`. |
+| `site_id` | – | The DEZ website's ID in Matomo, usually `1`. |
+| `oidc_client_id` | `matomo` | Name of the Keycloak client. |
+| `storage_class` | cluster default | StorageClass of the three volumes. |
+| `data_size`, `db_size` | `5Gi`, `10Gi` | Volume sizes, applied when the PVCs are created. A PVC can grow later only if its StorageClass allows expansion. |
+| `db_image` | MariaDB 11.8.9, pinned by digest | E.g. a mirror. |
+| `backup.enable`, `.schedule`, `.keep_days`, `.size`, `.target` | `true`, `30 2 * * *`, `14`, `10Gi`, `pvc` | See [Backups](#matomo-backups). `pvc` is the only target so far. |
 
 - **Install lock.** Until the web installer has run, anyone reaching it could
-  make themselves superuser. While `installed` is `false`, APISIX lets only
-  `install_allowed_cidrs` through and answers everyone else with `403` (with an
-  empty list: everyone). This needs APISIX to see the real client address. If
-  another proxy sits in front of APISIX, list its addresses in
-  `install_trusted_proxies`; APISIX then takes the client from
-  `X-Forwarded-For` (plugin `real-ip`). The plugins `ip-restriction` and
-  `real-ip` must be enabled in APISIX.
-- **`keycloak_internal_url`** (optional) sets `MATOMO_OIDC_BACKCHANNEL_URL`, so
-  Matomo calls the token and userinfo endpoints through the internal Keycloak
-  service. Keycloak must still issue tokens for its public hostname
-  (`inv_access.platform.hostname`), which it does when its hostname is
-  configured. Without it, Matomo uses the public URL.
+  make themselves superuser. Until then, APISIX lets only a browser through that
+  opened the one-time install link; the link sets an `HttpOnly` cookie and
+  redirects, so the token leaves the address bar at once. The token is in the
+  playbook output and in the Secret `digital-energy-twin-matomo-install`, and
+  both stop working once Matomo is installed. This works behind any proxy,
+  unlike an IP allow list.
+- **Internal Keycloak URL.** Matomo calls Keycloak's token and userinfo
+  endpoints itself. At the public address this can fail inside the cluster (no
+  hairpin routing, or a platform CA Matomo does not trust). The playbook
+  therefore looks for the Keycloak service in the access namespace
+  (`inv_access.ns_name`), asks it for the realm's issuer from inside the Keycloak
+  pod, and uses it only if that is the public issuer, which Matomo checks tokens
+  against. The playbook output says which URL Matomo uses.
 - `MATOMO_DISABLE_TRUSTED_HOST_CHECK` is never set; Matomo trusts the host the
   installer was opened with.
-- The sizes apply when the PVCs are created. A PVC can grow later only if its
-  StorageClass allows volume expansion.
 - Reports are archived when someone opens them (Matomo's default, browser-triggered
   archiving). With a lot of traffic, a `core:archive` CronJob would be the next step.
 - **Switching Matomo off.** `enable: false` removes the APISIX route, the Ingress or
@@ -459,115 +597,21 @@ like for the addon client:
   the `matomo` client's browser flow and deletes them again, also when the check
   fails. The run fails with `SECURITY: …` if the user without a role gets
   through, and also if the user with the role is refused, because then the first
-  result proves nothing. The users need nothing but a password; a realm that
-  requires other attributes or actions when users are created can make the check
-  fail. Before these steps the addon fetches a fresh Keycloak admin token, so it
-  cannot expire during them and leave the temporary users behind.
-
-### Runbook for each customer
-
-Prerequisites: a release with Matomo is adopted, DNS for `matomo.host` points to
-the platform entry, and section 12 of the customer's privacy notice is at least
-being prepared. Replace `NS` with the addon namespace and
-`https://matomo.example.com` with `https://<matomo.host>`.
-
-1. **Deploy, locked.** Set `matomo.enable: true`, `installed: false`, and
-   `install_allowed_cidrs` to the address you install from. Run the playbook.
-   It must finish without errors, including the Keycloak check. Pods:
-   `kubectl -n NS get pods -l 'app in (digital-energy-twin-matomo, digital-energy-twin-matomo-db)'`.
-2. **Install once.** Open `https://matomo.example.com` from the allowed
-   address. The database settings are prefilled. Create the superuser as the
-   break-glass account, with a login that can never be a Keycloak username, e.g.
-   `matomo-breakglass`. Store its password in the customer inventory's Ansible
-   Vault. As first website, enter the public frontend `https://<public_host>`;
-   its ID (usually `1`) is `site_id`. Ignore the tracking code: the frontend has
-   its own tracker. Then log in and turn on two-factor authentication for the
-   break-glass account (*Administration > Personal > Security*). It logs in with
-   its password only: Matomo does not let superusers log in via Keycloak.
-3. **Unlock and restart.** Set `installed: true` and run the playbook. The route
-   opens and the backup job is created. Restart Matomo so that its entrypoint
-   activates the plugins, and check the log:
-
-   ```bash
-   kubectl -n NS rollout restart deployment/digital-energy-twin-matomo
-   kubectl -n NS rollout status deployment/digital-energy-twin-matomo
-   kubectl -n NS logs deployment/digital-energy-twin-matomo | grep 'Activated plugin'
-   # Expected: Activated plugin LoginOIDC
-   #           Activated plugin NoPasswordReset
-   ```
-
-   The login page now shows a **Keycloak** button. *Lost your password?* is
-   blocked by NoPasswordReset.
-4. **Privacy configuration.** Apply the same settings as the monorepo's
-   `apps/frontend/tests/matomo/configure.spec.ts`, which section 12 of the
-   privacy notice describes. In the UI (*Administration > Privacy* and
-   *Administration > System > Geolocation*), or with the API calls below:
-
-   | Setting | Value |
-   | --- | --- |
-   | Anonymize visitors' IP addresses | on, mask 4 bytes, also for enrichment |
-   | Anonymize User ID and Order ID | on |
-   | Referrer | do not store (`exclude_all`) |
-   | Disable all tracking cookies (`forceCookielessTracking`) | **off**, required by the DEZ tracker |
-   | Randomize config_id | off |
-   | Geolocation | disabled |
-   | Compliance policy `cnil_v1` (enforced) | as on the devcontainer instance, unless section 12 says otherwise |
-
-   `[Tracker] trust_visitors_cookies = 1` is already set by the image.
-
-   ```bash
-   M=https://matomo.example.com/index.php
-   TOKEN=...      # Break-glass auth token: Administration > Personal > Security > Auth tokens
-   PW=...         # Break-glass password from the Ansible Vault (asked as confirmation)
-   api() { curl -fsS "$M" -d module=API -d format=json -d "token_auth=$TOKEN" --data-urlencode "passwordConfirmation=$PW" "$@"; echo; }
-   api -d method=PrivacyManager.setAnonymizeIpSettings -d anonymizeIPEnable=1 -d ipAddressMaskLength=4 \
-     -d useAnonymizedIpForVisitEnrichment=1 -d anonymizeUserId=1 -d anonymizeOrderId=1 \
-     -d anonymizeReferrer=exclude_all -d forceCookielessTracking=0 -d randomizeConfigId=0
-   api -d method=UserCountry.setLocationProvider -d providerId=disabled
-   api -d method=PrivacyManager.setComplianceStatus -d idSite=1 -d complianceType=cnil_v1 -d enforce=1
-   ```
-5. **Matomo users.** Keycloak only checks the role; Matomo also needs a user.
-   For each person with `matomoViewer` or `matomoAdmin`, create a Matomo user
-   whose login is exactly their Keycloak username (lower case), with a random
-   password nobody keeps, and give it *View* or *Admin* on the DEZ site. Their
-   first Keycloak login links the accounts. Keycloak users without a Matomo user
-   are rejected by Matomo ("User not found. OAuth registrations are disabled.").
-   If the realm uses the email address as username (*Realm settings > Login >
-   Email as username*, as on Civitas Core's local deployment), the Keycloak
-   username and therefore the Matomo login is the email address.
-
-   ```bash
-   LOGIN=jdoe EMAIL=jdoe@example.com ACCESS=view   # or admin
-   api -d method=UsersManager.addUser -d "userLogin=$LOGIN" -d "email=$EMAIL" \
-     --data-urlencode "password=$(openssl rand -base64 36)"
-   api -d method=UsersManager.setUserAccess -d "userLogin=$LOGIN" -d "access=$ACCESS" -d idSites=1
-   ```
-6. **Check the role gate.** Every playbook run checks it automatically (see
-   [Keycloak](#matomo-keycloak)). Check it by hand once: in a private browser
-   window, log in via **Keycloak** as a user without either role. Keycloak must
-   show "Kein Zugriff auf Matomo: …" and must not return to Matomo. A user with
-   the role and a Matomo user gets in.
-7. **When a role is removed**, also delete or downgrade the Matomo user. The
-   Keycloak flow blocks the next login, but an open Matomo session lasts until it
-   expires.
-
-   ```bash
-   api -d method=UsersManager.deleteUser -d "userLogin=$LOGIN"
-   # or: api -d method=UsersManager.setUserAccess -d "userLogin=$LOGIN" -d access=noaccess -d idSites=1
-   ```
-8. **Tracking.** Only once section 12 of the privacy notice is complete for
-   this customer: set `tracking_enabled: true` and `site_id`, and run the
-   playbook. The backend then gets `MATOMO_URL=https://<matomo.host>/matomo.php`
-   and `MATOMO_SITE_ID`. Without them it reports no analytics configuration, and
-   the public frontend neither offers web analytics nor sends anything.
-   `https://<public_host>/api/public/analytics-config` shows the active setting.
+  result proves nothing. It logs in with the username Keycloak stored, so realms
+  that use the email address as username work too. The users need nothing but a
+  password; a realm whose password policy or required user fields refuse them
+  makes the check fail with "The temporary check users could not log in", and
+  Matomo stays closed. Before these steps the addon fetches a fresh Keycloak admin
+  token, so it cannot expire during them and leave the temporary users behind.
+- Runs all checks above before it creates anything for Matomo, and after the main
+  app is deployed, so a Keycloak problem never blocks the main app.
 
 <a id="matomo-backups"></a>
 
 ### Backups
 
 Civitas Core backs up only PostgreSQL, so the addon backs up Matomo itself. The
-CronJob `digital-energy-twin-matomo-backup` exists once `installed` is `true`.
+CronJob `digital-energy-twin-matomo-backup` exists once the playbook has detected the installation.
 Before that there is nothing to back up. Every night (`backup.schedule`, cluster
 time zone) it writes to the PVC `digital-energy-twin-matomo-backup`, directory
 `matomo/`:
@@ -660,7 +704,7 @@ kubectl -n NS delete job matomo-backup-manual
    kubectl -n NS delete pod matomo-restore
    kubectl -n NS scale deployment/digital-energy-twin-matomo --replicas=1
    kubectl -n NS patch cronjob digital-energy-twin-matomo-backup -p '{"spec":{"suspend":false}}'
-   kubectl -n NS logs deployment/digital-energy-twin-matomo | grep 'Activated plugin'
+   kubectl -n NS logs deployment/digital-energy-twin-matomo | grep -E 'Activated plugin|already activated'
    ```
 
    Check that the login works and the reports are there.
@@ -709,16 +753,14 @@ that need a real cluster at the first rollout:
 
 - The PVCs are bound and the pods ready with the platform's StorageClass, and
   the backup job runs (manual job above) on the Matomo node.
-- From an address outside `install_allowed_cidrs`, `https://<matomo.host>`
-  answers `403` while `installed` is `false`; from an allowed address the
-  installer opens. If the allowed address also gets `403`, APISIX does not see
-  the client address: set `install_trusted_proxies`.
+- Before the installation, `https://<matomo.host>` answers `403` without the
+  install link and opens the installer with it.
 - If the CNI enforces NetworkPolicies, a pod other than Matomo cannot connect to
   `digital-energy-twin-matomo-db:3306`, and a pod outside the APISIX namespace
   cannot reach the Matomo pod on port 80, while Matomo still turns ready and
   APISIX still reaches it.
 - The playbook passes the Keycloak checks against the platform realm, and steps
-  3 to 6 of the runbook work.
+  3 to 7 of [Deploying Matomo](#deploying-matomo) work.
 - After step 8: with web analytics accepted in the public frontend, visits
   arrive in Matomo (the tracker posts cross-origin to `matomo.php`).
 
@@ -824,9 +866,9 @@ the APISIX namespace; older addon versions also used the addon namespace.
 
 `matomo.host` (only when Matomo is deployed):
 
-- `/*` -> Matomo. Until `matomo.installed: true`, only `matomo.install_allowed_cidrs`
-  get through; everyone else gets `403`. Afterwards it is open, and Matomo and
-  Keycloak handle the login.
+- `/*` -> Matomo. Until Matomo is installed, only a browser that opened the
+  one-time install link gets through; everyone else gets `403`. Afterwards it is
+  open, and Matomo and Keycloak handle the login.
 
 Application permissions and role assignment are described in
 [Admin frontend access](#admin-frontend-access).
