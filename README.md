@@ -410,8 +410,12 @@ scripts/matomo-configure.sh https://matomo.det.<domain> jane.doe@example.org joh
 
 - It applies the privacy settings that section 12 of the privacy notice
   describes (IP addresses fully masked, also for enrichment; User ID and order
-  ID anonymized; referrers not stored; geolocation off; compliance policy
-  `cnil_v1`; tracking cookies *not* disabled, which the DEZ tracker needs).
+  ID anonymized; referrers not stored; geolocation off; tracking cookies *not*
+  disabled, which the DEZ tracker needs).
+- It leaves Matomo's compliance policies alone. `MATOMO_COMPLIANCE_POLICY=cnil_v1`
+  in front of the command also enforces that policy for the DEZ site; it turns
+  off the visits log and the realtime view and rounds small numbers, so set it
+  only when the privacy notice says so.
 - It creates a Matomo user for each login, with a random password nobody keeps,
   and gives it *View* on the DEZ site; `:admin` gives *Admin*. Run it again with
   more logins at any time; existing users are kept.
@@ -442,8 +446,8 @@ the installer) to the `matomo` block and run the playbook. The backend then gets
 `MATOMO_URL` and `MATOMO_SITE_ID`, and the public frontend offers web analytics
 in its privacy dialog. `https://det.<domain>/api/public/analytics-config`
 shows the active setting (`{"matomo":null}` while it is off). Visits appear in
-Matomo under *Visitors > Overview*; the visits log stays empty on purpose, because
-the `cnil_v1` policy turns it off.
+Matomo under *Visitors > Overview*. Reports for today can lag up to 15 minutes,
+because Matomo caches them that long.
 
 **When someone leaves**, remove their Keycloak role and their Matomo user
 (*Administration > System > Users*). The Keycloak role check blocks their next

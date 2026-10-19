@@ -8,10 +8,13 @@
 #                username); gets View on the DEZ site. login:admin gets Admin.
 #   Without logins only the privacy settings are applied.
 # A platform CA that curl does not know: CURL_CA_BUNDLE=/path/to/ca.crt scripts/...
+# MATOMO_COMPLIANCE_POLICY=cnil_v1 also enforces that policy for the DEZ site; it
+# hides the visits log and rounds small numbers, so only set it when the privacy
+# notice asks for it. Without it the compliance settings stay as they are.
 set -uo pipefail
 
 if [ $# -lt 1 ] || [[ "$1" != http*://* ]]; then
-  sed -n '2,10p' "$0" >&2
+  sed -n '2,13p' "$0" >&2
   exit 2
 fi
 M=${1%/}/index.php
@@ -45,7 +48,10 @@ api -d method=PrivacyManager.setAnonymizeIpSettings -d anonymizeIPEnable=1 -d ip
   -d useAnonymizedIpForVisitEnrichment=1 -d anonymizeUserId=1 -d anonymizeOrderId=1 \
   -d anonymizeReferrer=exclude_all -d forceCookielessTracking=0 -d randomizeConfigId=0
 api -d method=UserCountry.setLocationProvider -d providerId=disabled
-api -d method=PrivacyManager.setComplianceStatus -d "idSite=$SITE_ID" -d complianceType=cnil_v1 -d enforce=1
+if [ -n "${MATOMO_COMPLIANCE_POLICY:-}" ]; then
+  api -d method=PrivacyManager.setComplianceStatus -d "idSite=$SITE_ID" \
+    -d "complianceType=$MATOMO_COMPLIANCE_POLICY" -d enforce=1
+fi
 
 if [ $# -gt 0 ]; then
   echo '--- Matomo users (login = Keycloak username, random password nobody keeps)'

@@ -359,8 +359,12 @@ class MatomoTests(unittest.TestCase):
         self.assertIn("Usage: scripts/matomo-configure.sh", usage.stderr)
         text = script.read_text()
         for setting in ("anonymizeIPEnable=1", "ipAddressMaskLength=4", "forceCookielessTracking=0",
-                        "providerId=disabled", "complianceType=cnil_v1"):
+                        "providerId=disabled"):
             self.assertIn(setting, text)
+        # A compliance policy hides reports, so it is only enforced on request.
+        self.assertIn('if [ -n "${MATOMO_COMPLIANCE_POLICY:-}" ]; then\n  api -d method=PrivacyManager.setComplianceStatus',
+                      text)
+        self.assertNotIn("idSite=all", text)
 
     def test_deployment_waits_for_the_keycloak_client_secret(self):
         names = [entry["name"] for entry in TASKS]
