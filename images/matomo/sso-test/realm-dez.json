@@ -1,0 +1,151 @@
+{
+  "realm": "dez",
+  "enabled": true,
+  "editUsernameAllowed": false,
+  "authenticatorConfig": [
+    {
+      "alias": "matomo not viewer",
+      "config": { "condUserRole": "digital-energy-twin.matomoViewer", "negate": "true" }
+    },
+    {
+      "alias": "matomo not admin",
+      "config": { "condUserRole": "digital-energy-twin.matomoAdmin", "negate": "true" }
+    },
+    {
+      "alias": "matomo deny message",
+      "config": { "denyErrorMessage": "Kein Zugriff auf Matomo: Ihrem Konto fehlt die Rolle matomoViewer oder matomoAdmin." }
+    }
+  ],
+  "authenticationFlows": [
+    {
+      "id": "6f1c2b0e-6d3a-4c1e-9b8a-6d0a7c3f1a01",
+      "alias": "matomo browser",
+      "description": "Browser login for Matomo: denies users without a Matomo role, also with an existing SSO session",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        { "flowAlias": "matomo authentication", "requirement": "REQUIRED", "priority": 10, "authenticatorFlow": true, "userSetupAllowed": false },
+        { "flowAlias": "matomo role gate", "requirement": "CONDITIONAL", "priority": 20, "authenticatorFlow": true, "userSetupAllowed": false }
+      ]
+    },
+    {
+      "alias": "matomo authentication",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        { "authenticator": "auth-cookie", "requirement": "ALTERNATIVE", "priority": 10, "authenticatorFlow": false, "userSetupAllowed": false },
+        { "flowAlias": "matomo forms", "requirement": "ALTERNATIVE", "priority": 20, "authenticatorFlow": true, "userSetupAllowed": false }
+      ]
+    },
+    {
+      "alias": "matomo forms",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        { "authenticator": "auth-username-password-form", "requirement": "REQUIRED", "priority": 10, "authenticatorFlow": false, "userSetupAllowed": false }
+      ]
+    },
+    {
+      "alias": "matomo role gate",
+      "description": "Runs when the user has neither matomoViewer nor matomoAdmin",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        { "authenticator": "conditional-user-role", "authenticatorConfig": "matomo not viewer", "requirement": "REQUIRED", "priority": 10, "authenticatorFlow": false, "userSetupAllowed": false },
+        { "authenticator": "conditional-user-role", "authenticatorConfig": "matomo not admin", "requirement": "REQUIRED", "priority": 20, "authenticatorFlow": false, "userSetupAllowed": false },
+        { "authenticator": "deny-access-authenticator", "authenticatorConfig": "matomo deny message", "requirement": "REQUIRED", "priority": 30, "authenticatorFlow": false, "userSetupAllowed": false }
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "digital-energy-twin",
+      "name": "DEZ (holds the client roles, as in production)",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false
+    },
+    {
+      "clientId": "matomo",
+      "name": "Matomo",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "matomo-dev-secret",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:8093/index.php?module=LoginOIDC&action=callback&provider=oidc"
+      ],
+      "attributes": {
+        "post.logout.redirect.uris": "http://localhost:8093/*"
+      },
+      "authenticationFlowBindingOverrides": {
+        "browser": "6f1c2b0e-6d3a-4c1e-9b8a-6d0a7c3f1a01"
+      },
+      "defaultClientScopes": ["basic", "profile", "email", "roles", "web-origins", "acr"]
+    }
+  ],
+  "roles": {
+    "client": {
+      "digital-energy-twin": [
+        { "name": "matomoViewer", "description": "Read access to the DEZ Matomo reports" },
+        {
+          "name": "matomoAdmin",
+          "description": "Read access and management of the DEZ Matomo website",
+          "composite": true,
+          "composites": { "client": { "digital-energy-twin": ["matomoViewer"] } }
+        }
+      ]
+    }
+  },
+  "users": [
+    {
+      "username": "anna",
+      "enabled": true,
+      "email": "anna@example.invalid",
+      "emailVerified": true,
+      "firstName": "Anna",
+      "lastName": "Rolle-und-Matomo",
+      "credentials": [{ "type": "password", "value": "anna", "temporary": false }],
+      "clientRoles": { "digital-energy-twin": ["matomoViewer"] }
+    },
+    {
+      "username": "ben",
+      "enabled": true,
+      "email": "ben@example.invalid",
+      "emailVerified": true,
+      "firstName": "Ben",
+      "lastName": "Rolle-ohne-Matomo",
+      "credentials": [{ "type": "password", "value": "ben", "temporary": false }],
+      "clientRoles": { "digital-energy-twin": ["matomoViewer"] }
+    },
+    {
+      "username": "carla",
+      "enabled": true,
+      "email": "carla@example.invalid",
+      "emailVerified": true,
+      "firstName": "Carla",
+      "lastName": "Matomo-ohne-Rolle",
+      "credentials": [{ "type": "password", "value": "carla", "temporary": false }]
+    },
+    {
+      "username": "admin",
+      "enabled": true,
+      "email": "kc-admin@example.invalid",
+      "emailVerified": true,
+      "firstName": "Same",
+      "lastName": "Name-As-Superuser",
+      "credentials": [{ "type": "password", "value": "admin", "temporary": false }],
+      "clientRoles": { "digital-energy-twin": ["matomoAdmin"] }
+    }
+  ]
+}
