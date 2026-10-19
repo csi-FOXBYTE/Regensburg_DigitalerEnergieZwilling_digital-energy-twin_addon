@@ -128,6 +128,40 @@
       Define inv_addons['digital-energy-twin'].db to use another database server.
   when: digital_energy_twin_db_mode == 'central'
 
+# A matomo block indented one level too little lands outside the add-on and
+# can drag the next block (e.g. rustfs) out of inv_addons with it.
+- name: "Digital Energy Twin: Validate where the Matomo settings are"
+  ansible.builtin.assert:
+    that:
+      - matomo is not defined
+      - inv_addons.matomo is not defined
+    fail_msg: >-
+      Found a 'matomo' block outside inv_addons['digital-energy-twin']: it is indented too little.
+      Move it under digital-energy-twin, at the same indentation as public_host, and check that the
+      blocks after it (e.g. rustfs) are still indented under inv_addons.
+
+- name: "Digital Energy Twin: Validate the Matomo setting names"
+  ansible.builtin.assert:
+    that:
+      - digital_energy_twin_matomo_unknown_settings | length == 0
+      - (digital_energy_twin.matomo | default({})).enable | default(false) is boolean
+      - (digital_energy_twin.matomo | default({})).tracking_enabled | default(false) is boolean
+    fail_msg: >-
+      {{ ('Unknown Matomo settings: ' ~ (digital_energy_twin_matomo_unknown_settings | join(', ')) ~ '. ')
+      if digital_energy_twin_matomo_unknown_settings | length > 0 else '' }}Known settings:
+      {{ digital_energy_twin_matomo_known_settings | join(', ') }}; under backup:
+      {{ digital_energy_twin_matomo_known_backup_settings | join(', ') }}. enable and tracking_enabled
+      must be true or false, without quotes.
+  vars:
+    digital_energy_twin_matomo_known_settings:
+      [enable, host, oidc_client_id, keycloak_internal_url, installed, install_allowed_cidrs, install_trusted_proxies,
+       tracking_enabled, site_id, storage_class, data_size, db_size, db_image, backup]
+    digital_energy_twin_matomo_known_backup_settings: [enable, target, schedule, keep_days, size]
+    digital_energy_twin_matomo_unknown_settings: >-
+      {{ ((digital_energy_twin.matomo | default({})).keys() | difference(digital_energy_twin_matomo_known_settings) | list)
+      + ((((digital_energy_twin.matomo | default({})).backup | default({})).keys()
+      | difference(digital_energy_twin_matomo_known_backup_settings)) | map('regex_replace', '^', 'backup.') | list) }}
+
 - name: "Digital Energy Twin: Validate Matomo config"
   ansible.builtin.assert:
     that:

@@ -19,6 +19,7 @@ ENV.filters["regex_replace"] = lambda value, pattern, replacement: re.sub(patter
 ENV.tests["match"] = lambda value, pattern: re.match(pattern, value) is not None
 ENV.tests["search"] = lambda value, pattern: re.search(pattern, value) is not None
 ENV.tests["skipped"] = lambda result: bool(result.get("skipped"))
+ENV.filters["difference"] = lambda values, other: [value for value in values if value not in other]
 NAMES = {
     "digital_energy_twin_matomo_name": "digital-energy-twin-matomo",
     "digital_energy_twin_matomo_db_name": "digital-energy-twin-matomo-db",
@@ -285,6 +286,41 @@ class MatomoTests(unittest.TestCase):
         # The main app is fully deployed before any Matomo step can stop the run.
         self.assertLess(names.index("Upsert backend admin-api route (OIDC protected)"),
                         names.index("Refresh IDM settings for Matomo"))
+
+    def test_misplaced_or_misspelled_matomo_settings_stop_the_run(self):
+        placement = task("Validate where the Matomo settings are")["ansible.builtin.assert"]["that"]
+        for context, valid in (
+            ({"inv_addons": {"digital-energy-twin": {"matomo": {}}}}, True),
+            ({"inv_addons": {}, "matomo": {"enable": True}}, False),           # one level too far left
+            ({"inv_addons": {"matomo": {"enable": True}}}, False),             # next to the add-on
+        ):
+            with self.subTest(context=context):
+                self.assertEqual(all(ENV.compile_expression(condition)(**context) for condition in placement), valid)
+
+        names = task("Validate the Matomo setting names")
+        unknown = ENV.from_string(names["vars"]["digital_energy_twin_matomo_unknown_settings"])
+        known = {key: names["vars"][key] for key in ("digital_energy_twin_matomo_known_settings",
+                                                       "digital_energy_twin_matomo_known_backup_settings")}
+        conditions = names["ansible.builtin.assert"]["that"]
+        for matomo, expected_unknown, valid in (
+            ({"enable": True}, [], True),
+            ({"enable": True, "instaled": True}, ["instaled"], False),
+            ({"enable": True, "backup": {"keep_day": 7}}, ["backup.keep_day"], False),
+            ({"enable": "true"}, [], False),                                   # a string, not a boolean
+            ({"enable": True, "tracking_enabled": False, "site_id": 1, "backup": {"keep_days": 7}}, [], True),
+        ):
+            with self.subTest(matomo=matomo):
+                found = yaml.safe_load(unknown.render(digital_energy_twin={"matomo": matomo}, **known))
+                self.assertEqual(found, expected_unknown)
+                result = all(ENV.compile_expression(condition)(
+                    digital_energy_twin={"matomo": matomo}, digital_energy_twin_matomo_unknown_settings=found)
+                    for condition in conditions)
+                self.assertEqual(result, valid)
+
+    def test_default_inventory_ships_matomo_switched_off(self):
+        defaults = yaml.safe_load((ROOT / "default_inventory.yml").read_text())
+        matomo = defaults["all"]["children"]["controller"]["vars"]["inv_addons"]["digital-energy-twin"]["matomo"]
+        self.assertEqual(matomo, {"enable": False})
 
     def test_deployment_waits_for_the_keycloak_client_secret(self):
         names = [entry["name"] for entry in TASKS]
