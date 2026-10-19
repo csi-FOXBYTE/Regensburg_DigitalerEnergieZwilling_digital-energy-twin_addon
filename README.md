@@ -396,8 +396,9 @@ two-factor authentication (*Administration > Personal > Security*).
 superusers log in via Keycloak.
 
 **4. Run the playbook again.** It detects the installation, activates the
-Keycloak login in the running Matomo (no restart), opens the route for everyone,
-removes the install link and creates the nightly backup job. It prints
+Keycloak login in the running Matomo (no restart), applies the
+[DEZ defaults](#matomo-dez-defaults), opens the route for everyone, removes the
+install link and creates the nightly backup job. It prints
 `Matomo is installed; the Keycloak login is active`. The Matomo login page now
 shows a **Keycloak** button.
 
@@ -410,11 +411,14 @@ scripts/matomo-configure.sh https://matomo.det.<domain> jane.doe@example.org joh
 
 - It applies the privacy settings that section 12 of the privacy notice
   describes (IP addresses fully masked, also for enrichment; User ID and order
-  ID anonymized; referrers not stored; geolocation off; compliance policy
-  `cnil_v1` for all websites; tracking cookies *not* disabled, which the DEZ
-  tracker needs). *Administration > Privacy > Compliance* then shows every item
-  as compliant except "Opt-Out Configured", which stays "unknown": Matomo cannot
-  detect the DEZ consent dialog, which is the opt-out.
+  ID anonymized; referrers not stored; geolocation off; tracking cookies *not*
+  disabled, which the DEZ tracker needs).
+- It leaves Matomo's compliance policies alone. `MATOMO_COMPLIANCE_POLICY=cnil_v1`
+  in front of the command also enforces that policy for the DEZ site; it turns
+  off the visits log and the realtime view and rounds small numbers, so set it
+  only when the privacy notice says so. To switch it off again, turn it off for
+  the DEZ website *and* for "All websites" (*Administration > Privacy >
+  Compliance*).
 - It creates a Matomo user for each login, with a random password nobody keeps,
   and gives it *View* on the DEZ site; `:admin` gives *Admin*. Run it again with
   more logins at any time; existing users are kept.
@@ -445,8 +449,8 @@ the installer) to the `matomo` block and run the playbook. The backend then gets
 `MATOMO_URL` and `MATOMO_SITE_ID`, and the public frontend offers web analytics
 in its privacy dialog. `https://det.<domain>/api/public/analytics-config`
 shows the active setting (`{"matomo":null}` while it is off). Visits appear in
-Matomo under *Visitors > Overview*; the visits log stays empty on purpose, because
-the `cnil_v1` policy turns it off.
+Matomo under *Visitors > Overview* within a minute, and at once in the
+*Visits Log*.
 
 **When someone leaves**, remove their Keycloak role and their Matomo user
 (*Administration > System > Users*). The Keycloak role check blocks their next
@@ -469,6 +473,7 @@ login; an already open Matomo session lasts until it expires.
 | Browser: "Matomo is not installed yet. Open the install link …" (403) | Matomo is not installed and the browser has no install cookie. | Use the link from the playbook output; a new run prints it again. |
 | Matomo: "User not found. OAuth registrations are disabled." | Keycloak let the person in, but Matomo has no user with that login. | Create it with `scripts/matomo-configure.sh`, with the exact Keycloak username. |
 | The Keycloak login fails after the Keycloak page, e.g. a Matomo error about the token | Matomo cannot reach Keycloak's token endpoint (no hairpin routing, or a platform CA Matomo does not trust). | Set `matomo.keycloak_internal_url` to Keycloak's service URL. The playbook output says which URL Matomo uses. |
+| Matomo shows no visits although tracking is on | The selected date is not today (a user's own default can be *yesterday*), or a compliance policy such as CNIL is on for the website: it is stored separately for "All websites" and for each website. | Pick *today* in the date selector. Under *Administration > Privacy > Compliance*, check "All websites" **and** the DEZ website. Visits in the database: `select count(*), max(visit_last_action_time) from matomo_log_visit;` in the `matomo` database. |
 | No **Keycloak** button on the login page | Matomo is not detected as installed yet, or the second run did not happen. | Run the playbook again after the installer. |
 | `matomo-configure.sh`: "No password entered." or "Please specify a value for 'passwordConfirmation'" | The password was not pasted (in Windows PowerShell, Ctrl+V often does not paste into SSH). | Paste with a right-click; the script shows the number of characters it got. |
 | Matomo log: "Site content detection request … refused … private or reserved address" | Matomo tries to inspect the DEZ site for its "no data yet" page and refuses internal addresses. | Harmless; it stops once tracking data arrives. |
@@ -493,6 +498,23 @@ All in the addon namespace, unless noted:
 | Gateway/HTTPRoute or Ingress | `digital-energy-twin-matomo-host` | In the APISIX namespace, like the other hosts |
 | APISIX upstream and route | `digital-energy-twin-matomo-upstream`, `-direct` | `matomo.host` to Matomo; locked until installed |
 | Keycloak client, flow, roles | `matomo`, `matomo browser <hash>`, `matomoViewer`/`matomoAdmin` | See [Keycloak](#matomo-keycloak) |
+
+<a id="matomo-dez-defaults"></a>
+Once Matomo is installed, every run also sets these in `config.ini.php`
+(only if they differ):
+
+| Setting | Effect |
+| --- | --- |
+| `default_day = today` | Reports and dashboard open on today instead of yesterday. A user's own choice under *Administration > Personal > Settings* still wins. |
+| `time_before_today_archive_considered_outdated = 60` | Reports for today are at most a minute old (Matomo's default: 15 minutes). A value saved under *Administration > System > General settings* wins over it. |
+| Plugins `DevicesDetection`, `Resolution`, `DevicePlugins` deactivated | No device type, brand or model, operating system, browser, screen resolution or browser plugins are recorded. Activating them in the UI lasts only until the next run. |
+
+Turning detection off applies to new visits only. To remove it from visits
+recorded before (cannot be undone):
+
+```bash
+kubectl -n NS exec deployment/digital-energy-twin-matomo -c matomo -- su -s /bin/bash www-data -c "cd /var/www/html && ./console privacymanager:anonymize-some-raw-data -n --unset-visit-columns=config_device_type,config_device_brand,config_device_model,config_os,config_os_version,config_browser_name,config_browser_version,config_browser_engine,config_client_type,config_resolution,config_cookie,config_flash,config_java,config_pdf,config_quicktime,config_realplayer,config_silverlight,config_windowsmedia && ./console core:invalidate-report-data --dates=2026-01-01,today && ./console core:archive --force-all-websites --url=https://matomo.det.<domain> && ./console core:purge-old-archive-data all"
+```
 
 The Matomo volume is `ReadWriteOnce` and mounted read-write only by the Matomo
 pod. The backup job mounts only its `config/` directory, read-only, and runs on

@@ -2404,6 +2404,31 @@
   failed_when: (digital_energy_twin_matomo_activation.rc | default(digital_energy_twin_matomo_activation.return_code | default(0))) | int != 0
   when: digital_energy_twin_matomo_enabled and digital_energy_twin_matomo_installed and not digital_energy_twin_matomo_oidc_active
 
+# Reports open on today and are at most a minute old; device, operating system,
+# browser, screen and browser plugin detection stay off (data minimisation).
+# Matomo rewrites config.ini.php without quotes around numbers, hence "?.
+- name: "Digital Energy Twin: Apply the DEZ defaults in Matomo"
+  kubernetes.core.k8s_exec:
+    namespace: "{{ k8s_namespace }}"
+    pod: "{{ (digital_energy_twin_matomo_pods.resources | rejectattr('metadata.deletionTimestamp', 'defined') | first).metadata.name }}"
+    container: matomo
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    command: >-
+      su -s /bin/bash www-data -c 'set -e; cd /var/www/html; f=config/config.ini.php; changed=;
+      if ! grep -Eq "^default_day = \"?today\"?$" "$f"; then
+      ./console config:set --section=General --key=default_day --value=today; changed=1; fi;
+      if ! grep -Eq "^time_before_today_archive_considered_outdated = \"?60\"?$" "$f"; then
+      ./console config:set --section=General --key=time_before_today_archive_considered_outdated --value=60; changed=1; fi;
+      active=; for p in DevicesDetection Resolution DevicePlugins; do
+      if grep -q "^Plugins\[\] = \"$p\"" "$f"; then active="$active $p"; fi; done;
+      if [ -n "$active" ]; then ./console plugin:deactivate $active; changed=1; fi;
+      if [ -n "$changed" ]; then echo DEZ-DEFAULTS-CHANGED; fi'
+  register: digital_energy_twin_matomo_defaults
+  changed_when: "'DEZ-DEFAULTS-CHANGED' in digital_energy_twin_matomo_defaults.stdout"
+  failed_when: (digital_energy_twin_matomo_defaults.rc | default(digital_energy_twin_matomo_defaults.return_code | default(0))) | int != 0
+  when: digital_energy_twin_matomo_enabled and digital_energy_twin_matomo_installed
+
 - name: "Digital Energy Twin: Get the Matomo install token"
   kubernetes.core.k8s_info:
     kind: Secret
