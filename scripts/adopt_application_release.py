@@ -15,10 +15,10 @@ COMPONENTS = {
     "admin": ("adminfrontend", "base-frontend"),
     "public": ("frontend", "frontend"),
     "backend": ("backend", "rg-dez-backend"),
-    "matomo": ("matomo", "regensburg-web-matomo"),
 }
-# Images added after the first releases; releases up to v1.7.3 have no matomo.
-OPTIONAL_COMPONENTS = {"matomo"}
+# The addon builds and pins the Matomo image itself (images/matomo,
+# vars/matomo_image.json). App releases that still contain one (v1.8.0) are
+# adopted without it.
 
 
 def require(condition: bool, message: str) -> None:
@@ -56,13 +56,7 @@ def prepare_release(source: Path, release_file: Path, selection_file: Path,
     files = manifest["sboms"]["files"]
     selected_images = selection.get("images", {})
     verified_sboms: dict[str, bytes] = {}
-    skipped: list[str] = []
     for destination_name, (component, package_name) in COMPONENTS.items():
-        if component in OPTIONAL_COMPONENTS and component not in manifest:
-            require(component not in selected_images and component not in manifest["sboms"]["images"],
-                    f"Validated selection differs for {component}")
-            skipped.append(destination_name)
-            continue
         image = manifest[component]
         reference = f"{image['image']}@{image['digest']}"
         require(selected_images.get(component) == reference,
@@ -90,8 +84,6 @@ def prepare_release(source: Path, release_file: Path, selection_file: Path,
         target = destination / "sboms" / f"{destination_name}.cdx.json"
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(content)
-    for destination_name in skipped:
-        (destination / "sboms" / f"{destination_name}.cdx.json").unlink(missing_ok=True)
 
     selected = {"digital_energy_twin_application_release": {
         "repository": APPLICATION_REPOSITORY, "tag": tag, "manifest": manifest}}
@@ -106,12 +98,14 @@ def prepare_release(source: Path, release_file: Path, selection_file: Path,
     config["rootComponent"]["bom-ref"] = purl
     config["rootComponent"]["purl"] = purl
     for component in config["imageComponents"]:
+        if component["sourceKey"] not in COMPONENTS:
+            continue
         component.pop("attestationRepository", None)
         component["releaseRepository"] = APPLICATION_REPOSITORY
     config_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
     (destination / "vars/software_references.yml").unlink(missing_ok=True)
     return {"applicationTag": tag, "appVersion": manifest["appVersion"],
-            "images": selected_images}
+            "images": {component: selected_images[component] for component, _ in COMPONENTS.values()}}
 
 
 if __name__ == "__main__":

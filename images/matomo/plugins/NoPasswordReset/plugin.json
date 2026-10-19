@@ -1,0 +1,11 @@
+{
+  "name": "NoPasswordReset",
+  "description": "Blocks the e-mail password reset and invitation links while LoginOIDC is configured, so users without a Keycloak role cannot fall back to password login.",
+  "version": "1.1.0",
+  "theme": false,
+  "require": {
+    "matomo": ">=5.0.0-b1,<6.0.0-b1"
+  },
+  "authors": [{ "name": "csi / FOXBYTE" }],
+  "license": "GPL v3+"
+}

@@ -45,9 +45,8 @@
       "sourceKey": "matomo",
       "sbomPath": "sboms/matomo.cdx.json",
       "relationship": "deployed application container",
-      "notes": "Matomo web analytics image with the LoginOIDC and NoPasswordReset plugins, deployed when inv_addons.digital-energy-twin.matomo.enable is true; its verified, digest-bound SBOM is maintained as a modular child BOM. Releases up to v1.7.3 contain no Matomo image.",
+      "notes": "Matomo web analytics image with the LoginOIDC and NoPasswordReset plugins, built from images/matomo and pinned in vars/matomo_image.json, deployed when inv_addons.digital-energy-twin.matomo.enable is true; its verified, digest-bound SBOM is maintained as a modular child BOM.",
       "license": "GPL-3.0-or-later",
-      "releaseRepository": "csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_MonoRepo",
       "optional": true
     }
   ],

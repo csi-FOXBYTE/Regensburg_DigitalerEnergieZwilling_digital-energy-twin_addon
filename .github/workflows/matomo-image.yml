@@ -1,0 +1,114 @@
+name: Build Matomo image
+
+# Builds images/matomo, pushes it by a unique build tag and pins the new digest
+# and its SBOM on main. The next playbook run deploys it.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+# Same group as the addon release: both commit to main.
+concurrency:
+  group: addon-release-main
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/csi-foxbyte/regensburg-web-matomo
+  NODE_BASE: node:24.21.0-bookworm-slim
+  MATOMO_BASE: matomo:5.14.0-apache
+  PLATFORM: linux/amd64
+
+jobs:
+  build-matomo:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout addon
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Pin the base images by digest
+        id: bases
+        shell: bash
+        run: |
+          set -euo pipefail
+          digest() {
+            docker buildx imagetools inspect "$1" --format '{{json .Manifest}}' \
+              | python3 -c 'import json, sys; print(json.load(sys.stdin)["digest"])'
+          }
+          echo "node=$NODE_BASE@$(digest "$NODE_BASE")" >> "$GITHUB_OUTPUT"
+          echo "matomo=$MATOMO_BASE@$(digest "$MATOMO_BASE")" >> "$GITHUB_OUTPUT"
+          echo "build=${{ github.run_id }}-${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: images/matomo
+          platforms: ${{ env.PLATFORM }}
+          push: true
+          sbom: true
+          provenance: mode=max
+          tags: ${{ env.IMAGE }}:build-${{ steps.bases.outputs.build }}
+          build-args: |
+            NODE_BASE_IMAGE=${{ steps.bases.outputs.node }}
+            RUNTIME_BASE_IMAGE=${{ steps.bases.outputs.matomo }}
+            BUILD_ID=${{ steps.bases.outputs.build }}
+            SOURCE_COMMIT=${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=matomo
+          cache-to: type=gha,mode=max,scope=matomo
+
+      - name: Pin the image and its SBOM
+        shell: bash
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          mkdir -p .local
+          docker pull --platform "$PLATFORM" "$IMAGE@$DIGEST"
+          container=$(docker create --platform "$PLATFORM" "$IMAGE@$DIGEST")
+          docker cp "$container:/usr/share/regensburg/SBOM.cdx.json" .local/matomo-image-sbom.json
+          docker rm "$container"
+          python3 scripts/pin_matomo_image.py --image "$IMAGE" --digest "$DIGEST" \
+            --build "${{ steps.bases.outputs.build }}" --source "$GITHUB_SHA" --platform "$PLATFORM" \
+            --base-image "${{ steps.bases.outputs.node }}" \
+            --runtime-base-image "${{ steps.bases.outputs.matomo }}" \
+            --embedded-sbom .local/matomo-image-sbom.json \
+            --timestamp "$(TZ=UTC git show -s --date=format-local:%Y-%m-%dT%H:%M:%SZ --format=%cd "$GITHUB_SHA")"
+
+      - name: Regenerate the addon SBOM
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv .sbom-env
+          .sbom-env/bin/python -m pip install --requirement requirements-sbom.txt
+          SBOM_REQUIRE_CHILD_BOMS=1 .sbom-env/bin/python scripts/generate_sbom.py
+
+      - name: Commit the pin on main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- vars/matomo_image.json sboms/matomo.cdx.json SBOM.cdx.json SBOM.csv
+          if git diff --cached --quiet; then
+            echo "Nothing to pin"
+            exit 0
+          fi
+          git commit -m "chore: pinned matomo image build-${{ steps.bases.outputs.build }}"
+          # Fails if main moved since the dispatch; start the workflow again then.
+          git push origin HEAD:main

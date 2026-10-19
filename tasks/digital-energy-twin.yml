@@ -189,10 +189,18 @@
       - digital_energy_twin_application_release.manifest.adminfrontend.digest is match('^sha256:[a-f0-9]{64}$')
       - digital_energy_twin_application_release.manifest.frontend.digest is match('^sha256:[a-f0-9]{64}$')
       - digital_energy_twin_application_release.manifest.backend.digest is match('^sha256:[a-f0-9]{64}$')
-      # Releases up to v1.7.3 have no matomo image.
-      - digital_energy_twin_application_release.manifest.matomo is not defined or digital_energy_twin_application_release.manifest.matomo.digest is match('^sha256:[a-f0-9]{64}$')
     fail_msg: "The selected monorepo release is incomplete; prepare it from a completed release manifest."
   when: digital_energy_twin_application_release is defined
+
+# The Matomo image is built and pinned by this addon (images/matomo,
+# vars/matomo_image.json), not by the app release.
+- name: "Digital Energy Twin: Validate the pinned Matomo image"
+  ansible.builtin.assert:
+    that:
+      - digital_energy_twin_matomo_release.image is match('^[a-z0-9.-]+(/[a-z0-9._-]+)+$')
+      - digital_energy_twin_matomo_release.digest is match('^sha256:[a-f0-9]{64}$')
+    fail_msg: "vars/matomo_image.json does not pin a Matomo image by digest; run the workflow 'Build Matomo image'."
+  when: digital_energy_twin_matomo_release is defined
 
 - name: "Digital Energy Twin: Set defaults"
   set_fact:
@@ -208,7 +216,7 @@
     digital_energy_twin_admin_image: "{{ digital_energy_twin_application_release.manifest.adminfrontend.image ~ '@' ~ digital_energy_twin_application_release.manifest.adminfrontend.digest if digital_energy_twin_application_release is defined else software['digital-energy-twin'].admin.registry ~ '/' ~ software['digital-energy-twin'].admin.repository ~ ':' ~ software['digital-energy-twin'].admin.tag }}"
     digital_energy_twin_public_image: "{{ digital_energy_twin_application_release.manifest.frontend.image ~ '@' ~ digital_energy_twin_application_release.manifest.frontend.digest if digital_energy_twin_application_release is defined else software['digital-energy-twin'].public.registry ~ '/' ~ software['digital-energy-twin'].public.repository ~ ':' ~ software['digital-energy-twin'].public.tag }}"
     digital_energy_twin_backend_image: "{{ digital_energy_twin_application_release.manifest.backend.image ~ '@' ~ digital_energy_twin_application_release.manifest.backend.digest if digital_energy_twin_application_release is defined else software['digital-energy-twin'].backend.registry ~ '/' ~ software['digital-energy-twin'].backend.repository ~ ':' ~ software['digital-energy-twin'].backend.tag }}"
-    digital_energy_twin_matomo_image: "{{ digital_energy_twin_application_release.manifest.matomo.image ~ '@' ~ digital_energy_twin_application_release.manifest.matomo.digest if digital_energy_twin_application_release is defined and digital_energy_twin_application_release.manifest.matomo is defined else '' }}"
+    digital_energy_twin_matomo_image: "{{ digital_energy_twin_matomo_release.image ~ '@' ~ digital_energy_twin_matomo_release.digest if digital_energy_twin_matomo_release is defined else '' }}"
     digital_energy_twin_database_secret_name: "digital-energy-twin-database"
     digital_energy_twin_smtp_secret_name: "digital-energy-twin-smtp"
     digital_energy_twin_feedback_mail_to: "{{ digital_energy_twin.feedback_mail_to | default('') | trim }}"
@@ -256,7 +264,7 @@
 - name: "Digital Energy Twin: Set Matomo defaults"
   ansible.builtin.set_fact:
     digital_energy_twin_matomo_requested: "{{ digital_energy_twin_enabled and (digital_energy_twin_matomo_config.enable | default(false) | bool) }}"
-    # Releases up to v1.7.3 have no matomo image; Matomo is then skipped.
+    # Without a pinned image (vars/matomo_image.json) Matomo is skipped.
     digital_energy_twin_matomo_enabled: >-
       {{ digital_energy_twin_enabled and (digital_energy_twin_matomo_config.enable | default(false) | bool)
       and digital_energy_twin_matomo_image | length > 0 }}
@@ -300,9 +308,8 @@
 - name: "Digital Energy Twin: Report skipped Matomo"
   ansible.builtin.debug:
     msg: >-
-      Matomo is enabled, but the selected application release
-      {{ digital_energy_twin_application_release.tag | default('(tag-based selection)') }}
-      contains no matomo image. Matomo is skipped until a release with Matomo is adopted.
+      Matomo is enabled, but vars/matomo_image.json pins no Matomo image. Matomo is
+      skipped until the workflow 'Build Matomo image' has pinned one.
   when: digital_energy_twin_matomo_requested and not digital_energy_twin_matomo_enabled
 
 - name: "Digital Energy Twin: Validate feedback mail transport"
@@ -1767,7 +1774,7 @@
 - name: "Digital Energy Twin: Set Matomo browser flow steps"
   ansible.builtin.set_fact:
     # Depth-first, so each parent gets its steps in this order. Reference:
-    # images/matomo/sso-test/realm-dez.json in the monorepo.
+    # images/matomo/sso-test/realm-dez.json.
     digital_energy_twin_matomo_flow_steps: >-
       {{ [
         {'parent': digital_energy_twin_matomo_flow_alias, 'level': 0, 'name': 'matomo authentication', 'flow': true, 'requirement': 'REQUIRED'},
