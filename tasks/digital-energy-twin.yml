@@ -167,12 +167,6 @@
     that:
       - digital_energy_twin.matomo is mapping
       - digital_energy_twin.matomo.host is not defined or digital_energy_twin.matomo.host | length > 0
-      - digital_energy_twin.matomo.install_allowed_cidrs | default([]) is sequence
-      - digital_energy_twin.matomo.install_allowed_cidrs | default([]) is not string
-      - digital_energy_twin.matomo.install_allowed_cidrs | default([]) | reject('match', '^[0-9a-fA-F:.]+/[0-9]{1,3}$') | list | length == 0
-      - digital_energy_twin.matomo.install_trusted_proxies | default([]) is sequence
-      - digital_energy_twin.matomo.install_trusted_proxies | default([]) is not string
-      - digital_energy_twin.matomo.install_trusted_proxies | default([]) | reject('match', '^[0-9a-fA-F:.]+/[0-9]{1,3}$') | list | length == 0
       - digital_energy_twin.matomo.backup | default({}) is mapping
       - digital_energy_twin.matomo.backup.target | default('pvc') in ['pvc']
       - digital_energy_twin.matomo.backup.keep_days | default(14) | int > 0
@@ -180,8 +174,7 @@
         not (digital_energy_twin.matomo.tracking_enabled | default(false) | bool)
         or (digital_energy_twin.matomo.site_id | default('') | string) is match('^[1-9][0-9]*$')
     fail_msg: >-
-      inv_addons['digital-energy-twin'].matomo must be a mapping. install_allowed_cidrs
-      and install_trusted_proxies must be lists of CIDRs such as 192.0.2.10/32.
+      inv_addons['digital-energy-twin'].matomo must be a mapping.
       backup.target must be pvc (the only target so far) and backup.keep_days a
       positive number of days. tracking_enabled needs the numeric site_id of the
       DEZ website in Matomo.
@@ -270,8 +263,7 @@
     digital_energy_twin_matomo_host: "{{ digital_energy_twin_matomo_config.host | default('matomo.det.' ~ DOMAIN) }}"
     # Detected after the deployment ("Check whether Matomo is installed").
     digital_energy_twin_matomo_installed: false
-    digital_energy_twin_matomo_install_allowed_cidrs: "{{ digital_energy_twin_matomo_config.install_allowed_cidrs | default([]) }}"
-    digital_energy_twin_matomo_install_trusted_proxies: "{{ digital_energy_twin_matomo_config.install_trusted_proxies | default([]) }}"
+    digital_energy_twin_matomo_install_secret_name: "digital-energy-twin-matomo-install"
     digital_energy_twin_matomo_name: "digital-energy-twin-matomo"
     digital_energy_twin_matomo_data_pvc_name: "digital-energy-twin-matomo-data"
     digital_energy_twin_matomo_data_size: "{{ digital_energy_twin_matomo_config.data_size | default('5Gi') }}"
@@ -2410,17 +2402,57 @@
   failed_when: (digital_energy_twin_matomo_activation.rc | default(digital_energy_twin_matomo_activation.return_code | default(0))) | int != 0
   when: digital_energy_twin_matomo_enabled and digital_energy_twin_matomo_installed and not digital_energy_twin_matomo_oidc_active
 
-- name: "Digital Energy Twin: Report the Matomo installation"
-  ansible.builtin.debug:
-    msg: >-
-      {{ ('Matomo is installed; the Keycloak login is active'
-      ~ (' (activated now).' if digital_energy_twin_matomo_activation is not skipped else '.'))
-      if digital_energy_twin_matomo_installed else
-      ('Matomo is not installed yet. Run the web installer at https://' ~ digital_energy_twin_matomo_host
-      ~ ', then run the playbook again: it detects the installation and activates the Keycloak login.') }}
-      {{ 'matomo.installed in the inventory is no longer used and can be removed.'
-      if digital_energy_twin_matomo_config.installed is defined else '' }}
-  when: digital_energy_twin_matomo_enabled
+- name: "Digital Energy Twin: Get the Matomo install token"
+  kubernetes.core.k8s_info:
+    kind: Secret
+    namespace: "{{ k8s_namespace }}"
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    name: "{{ digital_energy_twin_matomo_install_secret_name }}"
+  register: digital_energy_twin_matomo_install_secret
+  when: digital_energy_twin_matomo_enabled and not digital_energy_twin_matomo_installed
+  no_log: true
+
+- name: "Digital Energy Twin: Create the Matomo install token once"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: "{{ digital_energy_twin_matomo_install_secret_name }}"
+      type: Opaque
+      stringData:
+        token: "{{ lookup('ansible.builtin.password', '/dev/null', length=40, chars=['ascii_letters', 'digits']) }}"
+  register: digital_energy_twin_matomo_install_secret_created
+  when: >-
+    digital_energy_twin_matomo_enabled and not digital_energy_twin_matomo_installed
+    and digital_energy_twin_matomo_install_secret.resources | length == 0
+  no_log: true
+
+- name: "Digital Energy Twin: Read the Matomo install token"
+  ansible.builtin.set_fact:
+    digital_energy_twin_matomo_install_token: >-
+      {{ ((digital_energy_twin_matomo_install_secret.resources[0].data.token | b64decode)
+      if digital_energy_twin_matomo_install_secret.resources | length > 0
+      else digital_energy_twin_matomo_install_secret_created.result.data.token | b64decode) }}
+  when: digital_energy_twin_matomo_enabled and not digital_energy_twin_matomo_installed
+  no_log: true
+
+# Once installed, the link has no use; a new installation gets a new one.
+- name: "Digital Energy Twin: Remove the Matomo install token after the installation"
+  kubernetes.core.k8s:
+    state: absent
+    api_version: v1
+    kind: Secret
+    name: "{{ digital_energy_twin_matomo_install_secret_name }}"
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+  when: digital_energy_twin_matomo_enabled and digital_energy_twin_matomo_installed
 
 - name: "Digital Energy Twin: Upsert APISIX upstream (matomo)"
   ansible.builtin.uri:
@@ -2443,7 +2475,9 @@
   when: digital_energy_twin_matomo_enabled
 
 # Until the web installer has run, anyone reaching it could become superuser.
-# The route then admits only install_allowed_cidrs (nobody if the list is empty).
+# Only a browser that opened the one-time install link gets through: the link
+# sets a cookie and redirects, so the token leaves the address bar at once.
+# This works behind any proxy, unlike an IP allow list.
 - name: "Digital Energy Twin: Upsert Matomo direct-host route"
   ansible.builtin.uri:
     method: PUT
@@ -2458,12 +2492,7 @@
       uri: "/*"
       upstream_id: "digital-energy-twin-matomo-upstream"
       status: 1
-      plugins: >-
-        {{ {} if digital_energy_twin_matomo_installed
-        else (digital_energy_twin_matomo_install_lock
-        | combine(digital_energy_twin_matomo_real_ip if digital_energy_twin_matomo_install_trusted_proxies | length > 0 else {}))
-        if digital_energy_twin_matomo_install_allowed_cidrs | length > 0
-        else digital_energy_twin_matomo_deny_all }}
+      plugins: "{{ {} if digital_energy_twin_matomo_installed else digital_energy_twin_matomo_install_lock }}"
     headers:
       Accept: application/json
       X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
@@ -2472,16 +2501,6 @@
       - 201
   vars:
     digital_energy_twin_matomo_install_lock:
-      ip-restriction:
-        whitelist: "{{ digital_energy_twin_matomo_install_allowed_cidrs }}"
-        message: "Matomo is not installed yet; access is limited to matomo.install_allowed_cidrs."
-    # Behind another proxy APISIX sees the proxy's address; take the client from X-Forwarded-For.
-    digital_energy_twin_matomo_real_ip:
-      real-ip:
-        source: http_x_forwarded_for
-        trusted_addresses: "{{ digital_energy_twin_matomo_install_trusted_proxies }}"
-        recursive: true
-    digital_energy_twin_matomo_deny_all:
       serverless-pre-function:
         _meta:
           disable: false
@@ -2489,11 +2508,35 @@
         functions:
           - |-
             return function()
+              local token = "{{ digital_energy_twin_matomo_install_token }}"
+              local cookie = "det_matomo_install"
+              if ngx.req.get_uri_args()["install"] == token then
+                ngx.header["Set-Cookie"] = cookie .. "=" .. token .. "; Path=/; Secure; HttpOnly; SameSite=Lax"
+                return ngx.redirect("/", 302)
+              end
+              if ngx.var["cookie_" .. cookie] == token then
+                return
+              end
               ngx.status = 403
-              ngx.header["Content-Type"] = "application/json"
-              ngx.say('{"message":"Matomo is not installed yet; set matomo.install_allowed_cidrs to install it"}')
+              ngx.header["Content-Type"] = "text/plain; charset=utf-8"
+              ngx.say("Matomo is not installed yet. Open the install link that the playbook printed.")
               return ngx.exit(403)
             end
+  when: digital_energy_twin_matomo_enabled
+
+- name: "Digital Energy Twin: Report the Matomo installation"
+  ansible.builtin.debug:
+    msg: >-
+      {{ ('Matomo is installed; the Keycloak login is active'
+      ~ (' (activated now).' if digital_energy_twin_matomo_activation is not skipped else '.'))
+      if digital_energy_twin_matomo_installed else
+      ('Matomo is not installed yet. Install it now through this one-time link: https://' ~ digital_energy_twin_matomo_host
+      ~ '/?install=' ~ digital_energy_twin_matomo_install_token ~ ' . Everyone else gets 403 until then. '
+      ~ 'Then run the playbook again: it detects the installation, activates the Keycloak login and opens Matomo.') }}
+      {{ 'Not used any more and can be removed from the inventory: matomo.' ~ (digital_energy_twin_matomo_config.keys()
+      | intersect(['installed', 'install_allowed_cidrs', 'install_trusted_proxies']) | join(', matomo.')) ~ '.'
+      if digital_energy_twin_matomo_config.keys() | intersect(['installed', 'install_allowed_cidrs', 'install_trusted_proxies'])
+      | length > 0 else '' }}
   when: digital_energy_twin_matomo_enabled
 
 - name: "Digital Energy Twin: Ensure Matomo backup volume"

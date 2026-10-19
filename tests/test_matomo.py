@@ -405,26 +405,35 @@ class MatomoTests(unittest.TestCase):
         removal = task("Remove Matomo backup job while backups are off")
         self.assertEqual(removal["kubernetes.core.k8s"]["state"], "absent")
 
-    def test_route_admits_only_allowed_networks_until_installed(self):
+    def test_route_admits_only_the_install_link_until_installed(self):
         route = task("Upsert Matomo direct-host route")
-        expression = route["ansible.builtin.uri"]["body"]["plugins"].strip()[2:-2]
-        context = {"digital_energy_twin_matomo_install_lock": {"ip-restriction": {}},
-                   "digital_energy_twin_matomo_real_ip": {"real-ip": {}},
-                   "digital_energy_twin_matomo_deny_all": {"serverless-pre-function": {}}}
-        evaluate = ENV.compile_expression(expression)
-        for installed, cidrs, proxies, expected in (
-            (True, ["192.0.2.10/32"], [], {}),
-            (False, ["192.0.2.10/32"], [], {"ip-restriction": {}}),
-            (False, ["192.0.2.10/32"], ["10.0.0.0/8"], {"ip-restriction": {}, "real-ip": {}}),
-            (False, [], [], {"serverless-pre-function": {}}),
-        ):
-            with self.subTest(installed=installed, cidrs=cidrs, proxies=proxies):
-                self.assertEqual(evaluate(**context, digital_energy_twin_matomo_installed=installed,
-                                          digital_energy_twin_matomo_install_allowed_cidrs=cidrs,
-                                          digital_energy_twin_matomo_install_trusted_proxies=proxies), expected)
-        self.assertEqual(route["vars"]["digital_energy_twin_matomo_install_lock"]["ip-restriction"]["whitelist"],
-                         "{{ digital_energy_twin_matomo_install_allowed_cidrs }}")
+        evaluate = ENV.compile_expression(route["ansible.builtin.uri"]["body"]["plugins"].strip()[2:-2])
+        lock = {"serverless-pre-function": {}}
+        self.assertEqual(evaluate(digital_energy_twin_matomo_installed=True,
+                                  digital_energy_twin_matomo_install_lock=lock), {})
+        self.assertEqual(evaluate(digital_energy_twin_matomo_installed=False,
+                                  digital_energy_twin_matomo_install_lock=lock), lock)
+        plugin = route["vars"]["digital_energy_twin_matomo_install_lock"]["serverless-pre-function"]
+        self.assertEqual(plugin["phase"], "rewrite")
+        lua = ENV.from_string(plugin["functions"][0]).render(digital_energy_twin_matomo_install_token="T0ken")
+        for expected in ('local token = "T0ken"', 'ngx.req.get_uri_args()["install"] == token',
+                         "HttpOnly", "Secure", "SameSite=Lax", 'ngx.redirect("/", 302)', "ngx.exit(403)"):
+            self.assertIn(expected, lua)
 
+    def test_install_token_exists_only_while_matomo_is_not_installed(self):
+        create = task("Create the Matomo install token once")
+        self.assertIn("not digital_energy_twin_matomo_installed", create["when"])
+        self.assertIn("resources | length == 0", create["when"])
+        self.assertTrue(create["no_log"])
+        removal = task("Remove the Matomo install token after the installation")
+        self.assertEqual(removal["kubernetes.core.k8s"]["state"], "absent")
+        self.assertIn("digital_energy_twin_matomo_installed", " ".join(conditions(removal)))
+        names = [entry["name"].split(": ", 1)[1] for entry in TASKS]
+        sequence = ["Remember whether Matomo is installed", "Read the Matomo install token",
+                    "Upsert Matomo direct-host route", "Report the Matomo installation"]
+        self.assertEqual([names.index(name) for name in sequence], sorted(names.index(name) for name in sequence))
+        report = task("Report the Matomo installation")["ansible.builtin.debug"]["msg"]
+        self.assertIn("/?install=", report)
 
 if __name__ == "__main__":
     unittest.main()
