@@ -23,6 +23,7 @@ REPOSITORY_DIR = Path(__file__).resolve().parents[1]
 CONFIG_PATH = REPOSITORY_DIR / "sbom.config.json"
 SOFTWARE_REFERENCES_PATH = REPOSITORY_DIR / "vars" / "software_references.yml"
 APPLICATION_RELEASE_PATH = REPOSITORY_DIR / "vars" / "application_release.json"
+MATOMO_IMAGE_PATH = REPOSITORY_DIR / "vars" / "matomo_image.json"
 JSON_OUTPUT_PATH = REPOSITORY_DIR / "SBOM.cdx.json"
 CSV_OUTPUT_PATH = REPOSITORY_DIR / "SBOM.csv"
 JSON_TEMPORARY_PATH = REPOSITORY_DIR / ".SBOM.cdx.tmp.json"
@@ -66,6 +67,27 @@ def get_property(component: dict[str, Any], name: str) -> str | None:
 
 
 def read_image_references() -> dict[str, dict[str, str]]:
+    """Read the app images and the Matomo image this addon pins itself."""
+    images = read_application_images()
+    if MATOMO_IMAGE_PATH.is_file():
+        pin = json.loads(MATOMO_IMAGE_PATH.read_text(encoding="utf-8"))[
+            "digital_energy_twin_matomo_release"]
+        images["matomo"] = {
+            "image": pin["image"],
+            "version": f"build-{pin['build']}",
+            "bom_ref": f"oci:{pin['image']}@{pin['digest']}",
+            "digest": pin["digest"],
+            "build": pin["build"],
+            "source_commit": pin["sourceCommit"],
+            "release_source": pin["releaseSource"],
+            "release_repository": pin["releaseRepository"],
+            "sbom_sha256": pin["sbom"]["sha256"],
+            "metadata_source": "vars/matomo_image.json",
+        }
+    return images
+
+
+def read_application_images() -> dict[str, dict[str, str]]:
     """Read the selected release manifest, or the existing tag-based selection."""
     if APPLICATION_RELEASE_PATH.is_file():
         release = json.loads(APPLICATION_RELEASE_PATH.read_text(encoding="utf-8"))[
@@ -76,11 +98,8 @@ def read_image_references() -> dict[str, dict[str, str]]:
         if release["tag"] != f"v{manifest['appVersion']}":
             raise ValueError("Application release tag does not match its manifest")
         images = {}
-        for key, component in (("admin", "adminfrontend"), ("public", "frontend"), ("backend", "backend"),
-                               ("matomo", "matomo")):
-            # Releases up to v1.7.3 have no matomo image.
-            if component == "matomo" and component not in manifest:
-                continue
+        # A matomo entry in the manifest (v1.8.0) is ignored: the addon pins Matomo itself.
+        for key, component in (("admin", "adminfrontend"), ("public", "frontend"), ("backend", "backend")):
             artifact = manifest[component]
             images[key] = {
                 "image": artifact["image"],
@@ -296,9 +315,12 @@ def create_bom(config: dict[str, Any]) -> dict[str, Any]:
             ]
             set_property(component, "sbom:child-bom-path", relative_path)
             set_property(component, "sbom:child-bom-link", bom_link)
-            repository_field = "releaseRepository" if "releaseRepository" in entry else "attestationRepository"
-            set_property(component, f"sbom:{'release' if repository_field == 'releaseRepository' else 'attestation'}-repository",
-                         require_string(entry.get(repository_field), f"{location}.{repository_field}"))
+            if "release_repository" in reference:
+                set_property(component, "sbom:release-repository", reference["release_repository"])
+            else:
+                repository_field = "releaseRepository" if "releaseRepository" in entry else "attestationRepository"
+                set_property(component, f"sbom:{'release' if repository_field == 'releaseRepository' else 'attestation'}-repository",
+                             require_string(entry.get(repository_field), f"{location}.{repository_field}"))
             component_dependencies[component["bom-ref"]] = [
                 f"{bom_link}#{quote(child_root_ref, safe='')}"
             ]

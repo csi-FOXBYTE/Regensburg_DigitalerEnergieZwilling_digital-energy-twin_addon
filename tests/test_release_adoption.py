@@ -90,15 +90,19 @@ class ReleaseAdoptionTests(unittest.TestCase):
         self.selection_file.write_text(json.dumps({"appVersion": "1.7.3", "sourceCommit": "a" * 40,
                                                    "images": images}))
 
-    def remove_matomo_from_release(self):
-        """Turn the fixture into a release from before matomo was added (up to v1.7.3)."""
-        del self.manifest["matomo"]
-        del self.manifest["sboms"]["images"]["matomo"]
-        del self.manifest["sboms"]["files"]["matomo.cdx.json"]
-        (self.source / "release/sboms/matomo.cdx.json").unlink()
+    def add_matomo_to_release(self):
+        """Turn the fixture into a release that still built Matomo (v1.8.0)."""
+        image = {"image": "ghcr.io/csi-foxbyte/regensburg-web-matomo", "digest": "sha256:" + "9" * 64,
+                 "build": "456-1", "sourceCommit": "b" * 40}
+        self.manifest["matomo"] = image
+        self.manifest["sboms"]["images"]["matomo"] = {
+            "digest": image["digest"], "sourceCommit": image["sourceCommit"], "build": image["build"]}
+        content = b'{"bomFormat": "CycloneDX"}\n'
+        (self.source / "release/sboms/matomo.cdx.json").write_bytes(content)
+        self.manifest["sboms"]["files"]["matomo.cdx.json"] = "sha256:" + hashlib.sha256(content).hexdigest()
         (self.source / "release/manifest.json").write_text(json.dumps(self.manifest))
         selection = json.loads(self.selection_file.read_text())
-        del selection["images"]["matomo"]
+        selection["images"]["matomo"] = f"{image['image']}@{image['digest']}"
         self.selection_file.write_text(json.dumps(selection))
 
     def adopt(self):
@@ -114,8 +118,10 @@ class ReleaseAdoptionTests(unittest.TestCase):
         config = json.loads((self.destination / "sbom.config.json").read_text())
         self.assertEqual(config["rootComponent"]["version"], "1.7.3")
         self.assertEqual(config["releaseTag"], "v1.7.3")
-        self.assertTrue(all(component["releaseRepository"] == selected["repository"]
-                            for component in config["imageComponents"]))
+        for component in config["imageComponents"]:
+            # Matomo's child SBOM comes from where its image was built, not from the app release.
+            if component["sourceKey"] != "matomo":
+                self.assertEqual(component["releaseRepository"], selected["repository"])
         for destination_name, (component, _) in COMPONENTS.items():
             expected = (self.source / "release/sboms" / f"{component}.cdx.json").read_bytes()
             self.assertEqual((self.destination / "sboms" / f"{destination_name}.cdx.json").read_bytes(), expected)
@@ -123,8 +129,7 @@ class ReleaseAdoptionTests(unittest.TestCase):
         defaults = task_defaults()
         environment = Environment(undefined=StrictUndefined)
         context = {"digital_energy_twin_application_release": selected}
-        for key, component in (("admin", "adminfrontend"), ("public", "frontend"),
-                               ("backend", "backend"), ("matomo", "matomo")):
+        for key, component in (("admin", "adminfrontend"), ("public", "frontend"), ("backend", "backend")):
             rendered = environment.from_string(defaults[f"digital_energy_twin_{key}_image"]).render(context)
             image = self.manifest[component]
             self.assertEqual(rendered, f"{image['image']}@{image['digest']}")
@@ -140,32 +145,26 @@ class ReleaseAdoptionTests(unittest.TestCase):
             self.assertEqual(deployment["spec"]["template"]["spec"]["containers"][0]["env"],
                              [{"name": "APP_VERSION", "value": "1.7.3"}])
 
-    def test_release_without_matomo_is_adopted_and_skips_matomo(self):
-        self.remove_matomo_from_release()
-        stale = self.destination / "sboms/matomo.cdx.json"
-        stale.parent.mkdir(parents=True)
-        stale.write_text("{}")
+    def test_matomo_comes_from_the_addon_not_from_the_app_release(self):
+        self.add_matomo_to_release()
+        own = self.destination / "sboms/matomo.cdx.json"
+        own.parent.mkdir(parents=True)
+        own.write_text('{"own": true}')
+        config_before = json.loads((self.destination / "sbom.config.json").read_text())
         result = self.adopt()
         self.assertNotIn("matomo", result["images"])
-        self.assertFalse(stale.exists())
-        for destination_name in ("admin", "public", "backend"):
-            self.assertTrue((self.destination / "sboms" / f"{destination_name}.cdx.json").exists())
+        self.assertEqual(own.read_text(), '{"own": true}')
+        matomo_config = next(c for c in config_before["imageComponents"] if c["sourceKey"] == "matomo")
+        self.assertIn(matomo_config, json.loads((self.destination / "sbom.config.json").read_text())["imageComponents"])
+        pin = json.loads((ROOT / "vars/matomo_image.json").read_text())["digital_energy_twin_matomo_release"]
         selected = json.loads((self.destination / "vars/application_release.json").read_text())[
             "digital_energy_twin_application_release"]
-        self.assertNotIn("matomo", selected["manifest"])
-        rendered = Environment(undefined=StrictUndefined).from_string(
-            task_defaults()["digital_energy_twin_matomo_image"]).render(
-            digital_energy_twin_application_release=selected)
-        self.assertEqual(rendered, "")
-
-    def test_rejects_matomo_selection_when_release_has_no_matomo(self):
-        self.remove_matomo_from_release()
-        selection = json.loads(self.selection_file.read_text())
-        selection["images"]["matomo"] = "ghcr.io/example/matomo@sha256:" + "f" * 64
-        self.selection_file.write_text(json.dumps(selection))
-        with self.assertRaisesRegex(ValueError, "Validated selection differs for matomo"):
-            self.adopt()
-        self.assertFalse((self.destination / "vars/application_release.json").exists())
+        environment = Environment(undefined=StrictUndefined)
+        image = task_defaults()["digital_energy_twin_matomo_image"]
+        self.assertEqual(environment.from_string(image).render(
+            digital_energy_twin_application_release=selected, digital_energy_twin_matomo_release=pin),
+            f"{pin['image']}@{pin['digest']}")
+        self.assertEqual(environment.from_string(image).render(digital_energy_twin_application_release=selected), "")
 
     def test_rejects_mismatched_selection_before_changing_deployment_inputs(self):
         selection = json.loads(self.selection_file.read_text())

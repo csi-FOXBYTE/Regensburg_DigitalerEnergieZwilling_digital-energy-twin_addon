@@ -1,0 +1,17 @@
+{
+  "digital_energy_twin_matomo_release": {
+    "image": "ghcr.io/csi-foxbyte/regensburg-web-matomo",
+    "digest": "sha256:af0684d7381aa0bd629cad0bed3046a3fe28a117a594d8e48b07073dbb1e90b7",
+    "build": "38746166333-1",
+    "sourceCommit": "9dfd20b0eea993d5948cab4068ccf6c6d2eb073a",
+    "releaseSource": "9dfd20b0eea993d5948cab4068ccf6c6d2eb073a",
+    "releaseRepository": "csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_MonoRepo",
+    "platform": "linux/amd64",
+    "baseImage": "node:24.21.0-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20",
+    "runtimeBaseImage": "matomo:5.14.0-apache@sha256:1e00192627025a9eb9108858a0d2fcedb495958adf8ee12cd2b2e4ec306efae4",
+    "sbom": {
+      "path": "sboms/matomo.cdx.json",
+      "sha256": "sha256:2c92b92862c3b39d0aa2dd23648c869129151e00a1a2960170b7510bb429ffd1"
+    }
+  }
+}
