@@ -2,7 +2,9 @@
 
 import hashlib
 import re
+import shlex
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -350,6 +352,44 @@ class MatomoTests(unittest.TestCase):
         # installed is detected, never read from the inventory.
         defaults = task("Set Matomo defaults")["ansible.builtin.set_fact"]
         self.assertIs(defaults["digital_energy_twin_matomo_installed"], False)
+
+    def test_dez_defaults_are_applied_once_after_the_installation(self):
+        names = [entry["name"].split(": ", 1)[1] for entry in TASKS]
+        self.assertLess(names.index("Remember whether Matomo is installed"),
+                        names.index("Apply the DEZ defaults in Matomo"))
+        defaults = task("Apply the DEZ defaults in Matomo")
+        self.assertIn("digital_energy_twin_matomo_installed", " ".join(conditions(defaults)))
+        command = shlex.split(defaults["kubernetes.core.k8s_exec"]["command"])
+        self.assertEqual(command[:5], ["su", "-s", "/bin/bash", "www-data", "-c"])
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp, "config")
+            config.mkdir()
+            ini = config / "config.ini.php"
+            ini.write_text('[General]\nsalt = "x"\n\n[PluginsInstalled]\n[Plugins]\nPlugins[] = "CoreHome"\n'
+                           'Plugins[] = "DevicesDetection"\nPlugins[] = "Resolution"\nPlugins[] = "DevicePlugins"\n')
+            # Stand-in for Matomo's console: logs the call and edits the file like it would.
+            console = Path(tmp, "console")
+            console.write_text(
+                '#!/bin/bash\necho "$*" >> calls.log\nf=config/config.ini.php\n'
+                'case "$1" in\n'
+                '  config:set) key=${3#--key=}; value=${4#--value=}; sed -i "s/^\\[General\\]$/[General]\\n$key = \\"$value\\"/" $f ;;\n'
+                '  plugin:deactivate) shift; for p in "$@"; do sed -i "/^Plugins\\[\\] = \\"$p\\"$/d" $f; done ;;\n'
+                'esac\n')
+            console.chmod(0o755)
+            script = command[5].replace("cd /var/www/html", f"cd {tmp}")
+            first = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+            self.assertEqual(first.returncode, 0, first.stderr)
+            self.assertIn("DEZ-DEFAULTS-CHANGED", first.stdout)
+            self.assertEqual(Path(tmp, "calls.log").read_text().splitlines(), [
+                "config:set --section=General --key=default_day --value=today",
+                "config:set --section=General --key=time_before_today_archive_considered_outdated --value=60",
+                "plugin:deactivate DevicesDetection Resolution DevicePlugins"])
+            self.assertIn('Plugins[] = "CoreHome"', ini.read_text())
+            # Matomo itself writes numbers without quotes when it rewrites the file.
+            ini.write_text(ini.read_text().replace('= "60"', "= 60"))
+            second = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+            self.assertEqual((second.returncode, second.stdout), (0, ""))
+            self.assertEqual(len(Path(tmp, "calls.log").read_text().splitlines()), 3)
 
     def test_configure_script_is_valid_and_explains_itself(self):
         script = ROOT / "scripts/matomo-configure.sh"
