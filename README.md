@@ -656,6 +656,32 @@ like for the addon client:
 - Runs all checks above before it creates anything for Matomo, and after the main
   app is deployed, so a Keycloak problem never blocks the main app.
 
+<a id="matomo-logs"></a>
+
+### Logs
+
+All Matomo pods log to stdout and stderr. None of them logs passwords, tokens
+or the OIDC code.
+
+| Pod | Read with | What it logs |
+| --- | --- | --- |
+| Matomo | `kubectl -n NS logs deployment/digital-energy-twin-matomo` | Plugin activation at start. One access log line per request: proxy address, time, method, path, status, bytes, duration in microseconds; no query string, referrer or user agent. Apache errors and Matomo's warnings and errors, with query values replaced by `removed`. |
+| MariaDB | `kubectl -n NS logs statefulset/digital-energy-twin-matomo-db` | Start, shutdown and warnings, e.g. aborted connections. |
+| Backup job | `kubectl -n NS get jobs`, then `kubectl -n NS logs job/<name>` | `backup written: …` or `backup failed: …`. |
+
+- Tracking requests appear as `POST /matomo.php`. A `4xx` or `5xx` there means
+  events are lost. `GET /matomo.php` are the Kubernetes probes.
+- The address in the access log is the proxy in front of Matomo, not the
+  visitor's.
+- Keycloak logins are in Keycloak's event log, client `matomo`. Keycloak logs
+  `LOGIN_ERROR` by default, also when the role check denies someone
+  (`error="access_denied"`). Successful `LOGIN` events appear only if the realm
+  saves events (*Realm settings > User events settings*, then *Events*), or if
+  Keycloak logs success events at `info`.
+- Password logins (break-glass) bypass Keycloak, so only Matomo sees them:
+  failed ones under *Administration > Diagnostic > Brute Force Log*, a user's
+  last activity as *Last seen* under *Administration > System > Users*.
+
 <a id="matomo-backups"></a>
 
 ### Backups
@@ -668,8 +694,8 @@ time zone) it writes to the PVC `digital-energy-twin-matomo-backup`, directory
 
 - `matomo-db-<UTC time>.sql.gz`: `mariadb-dump --single-transaction --routines`,
   consistent while Matomo keeps running.
-- `matomo-config-<UTC time>.ini.php`: `config/config.ini.php` only. The plugins
-  and `common.config.ini.php` are rewritten on every start.
+- `matomo-config-<UTC time>.ini.php`: `config/config.ini.php` only. The plugins,
+  `common.config.ini.php` and `config.php` are rewritten on every start.
 
 Files older than `backup.keep_days` (default 14) are deleted, but only after a
 new backup has succeeded. The job fails (non-zero exit code, failed Job in

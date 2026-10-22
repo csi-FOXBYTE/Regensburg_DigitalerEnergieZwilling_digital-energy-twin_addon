@@ -5,9 +5,9 @@ The official `matomo:5.14.0-apache` image plus the
 (5.0.0), so Matomo users log in via the platform Keycloak, and the small
 [NoPasswordReset](plugins/NoPasswordReset/NoPasswordReset.php) plugin. On every
 start the entrypoint copies the plugins and
-[common.config.ini.php](common.config.ini.php) into the volume, writes the
-Keycloak settings from the environment and activates the plugins once Matomo is
-installed. Settings from the config file are read-only in the Matomo UI.
+[common.config.ini.php](common.config.ini.php) and [config.php](config.php)
+into the volume, writes the Keycloak settings from the environment and
+activates the plugins once Matomo is installed. Settings from the config file are read-only in the Matomo UI.
 
 The password form stays on the login page; LoginOIDC cannot remove it. So that
 it is no way around Keycloak and its role check, normal users get a random
@@ -41,6 +41,19 @@ is linked to the Matomo user whose login equals their `preferred_username`
 (`disableSuperuser = 1`), so a Keycloak account that happens to share a
 superuser's login cannot take it over. The break-glass superuser keeps password
 login; anyone else who needs superuser access logs in with a password too.
+
+## Logs
+
+- Access log on stdout, one line per request: proxy address, time, method,
+  path without query string, status, bytes and duration in microseconds
+  ([apache-logging.conf](apache-logging.conf)). The query string is left out
+  because it carries the OIDC `code` and `state` of the Keycloak callback;
+  referrer and user agent are left out as well.
+- Apache errors and Matomo's own messages from `WARN` up on stderr
+  (`log_writers[] = errorlog` in [common.config.ini.php](common.config.ini.php)).
+  The error format leaves out the referrer. Matomo adds the query string to
+  its errors; [config.php](config.php) replaces every value there with
+  `removed`, except `module`, `action` and `method`.
 
 ## Keycloak client
 

@@ -22,7 +22,10 @@ RUN mkdir -p /opt/matomo-plugins/LoginOIDC \
   && tar xzf /tmp/loginoidc.tar.gz -C /opt/matomo-plugins/LoginOIDC --strip-components=1 \
   && rm /tmp/loginoidc.tar.gz
 COPY plugins/NoPasswordReset /opt/matomo-plugins/NoPasswordReset
-COPY common.config.ini.php /opt/matomo-config/common.config.ini.php
+COPY common.config.ini.php config.php /opt/matomo-config/
+COPY apache-logging.conf /etc/apache2/conf-enabled/dez-logging.conf
+RUN sed -i 's|^\(\s*CustomLog .*access\.log\) combined$|\1 dez|' /etc/apache2/sites-available/000-default.conf \
+  && grep -q 'CustomLog .*access\.log dez$' /etc/apache2/sites-available/000-default.conf
 COPY --chmod=755 entrypoint.sh /usr/local/bin/matomo-entrypoint.sh
 COPY --from=sbom /sbom/SBOM.cdx.json /usr/share/regensburg/SBOM.cdx.json
 ENTRYPOINT ["matomo-entrypoint.sh"]
