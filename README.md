@@ -661,7 +661,10 @@ like for the addon client:
 ### Logs
 
 All Matomo pods log to stdout and stderr. None of them logs passwords, tokens
-or the OIDC code.
+or the OIDC code. Kubernetes keeps these logs on the node, only while the pod
+exists (`kubectl logs --previous` shows the container before its last restart).
+The addon does not collect them centrally; long-term, searchable logs need the
+platform's log collection.
 
 | Pod | Read with | What it logs |
 | --- | --- | --- |
