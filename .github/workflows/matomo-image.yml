@@ -16,7 +16,7 @@ concurrency:
 
 env:
   IMAGE: ghcr.io/csi-foxbyte/regensburg-web-matomo
-  NODE_BASE: node:24.21.0-bookworm-slim
+  NODE_BASE: node:24.22.1-bookworm-slim
   MATOMO_BASE: matomo:5.14.0-apache
   PLATFORM: linux/amd64
 
