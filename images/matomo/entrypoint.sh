@@ -12,6 +12,7 @@ cd /var/www/html
 mkdir -p config plugins
 config=config/common.config.ini.php
 cp /opt/matomo-config/common.config.ini.php "$config"
+cp /opt/matomo-config/config.php config/config.php
 plugins=(LoginOIDC NoPasswordReset)
 for plugin in "${plugins[@]}"; do
   rm -rf "plugins/$plugin"
