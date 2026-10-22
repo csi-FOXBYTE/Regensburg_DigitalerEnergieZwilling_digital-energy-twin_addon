@@ -2,7 +2,7 @@
 # Matomo with the LoginOIDC plugin for login via Keycloak, plus NoPasswordReset.
 # Without MATOMO_OIDC_* variables it behaves like the official image (password
 # login only). The image workflow passes both base images pinned by digest.
-ARG NODE_BASE_IMAGE=node:24.21.0-bookworm-slim
+ARG NODE_BASE_IMAGE=node:24.22.1-bookworm-slim
 ARG RUNTIME_BASE_IMAGE=matomo:5.14.0-apache
 
 # Writes the image SBOM, the release evidence every image carries.

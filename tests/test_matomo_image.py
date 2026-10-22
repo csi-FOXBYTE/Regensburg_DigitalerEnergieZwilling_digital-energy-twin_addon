@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 IMAGE_DIR = ROOT / "images/matomo"
 WORKFLOW = yaml.safe_load((ROOT / ".github/workflows/matomo-image.yml").read_text())
 BUILD = {"build": "123-1", "source": "c" * 40, "digest": "sha256:" + "e" * 64,
-         "base_image": "node:24.21.0-bookworm-slim@sha256:" + "a" * 64,
+         "base_image": "node:24.22.1-bookworm-slim@sha256:" + "a" * 64,
          "runtime_base_image": "matomo:5.14.0-apache@sha256:" + "b" * 64}
 
 
