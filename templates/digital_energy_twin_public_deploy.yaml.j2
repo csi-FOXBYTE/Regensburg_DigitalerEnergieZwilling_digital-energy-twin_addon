@@ -14,6 +14,7 @@ spec:
       labels:
         app: digital-energy-twin-public
     spec:
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 101
@@ -36,6 +37,12 @@ spec:
             capabilities:
               drop:
                 - ALL
+          resources:
+            requests:
+              cpu: "{{ digital_energy_twin_public_cpu_request | default('10m') }}"
+              memory: "{{ digital_energy_twin_public_memory_request | default('32Mi') }}"
+            limits:
+              memory: "{{ digital_energy_twin_public_memory_limit | default('128Mi') }}"
           ports:
             - containerPort: {{ digital_energy_twin_public_port | int }}
           volumeMounts:

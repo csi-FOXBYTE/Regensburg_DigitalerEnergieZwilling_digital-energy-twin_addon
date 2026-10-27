@@ -1,0 +1,22 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: digital-energy-twin-backend
+  labels:
+    app: digital-energy-twin-backend
+spec:
+  podSelector:
+    matchLabels:
+      app: digital-energy-twin-backend
+  policyTypes:
+    - Ingress
+  ingress:
+    # Only through APISIX: no pod may reach the backend directly and bypass the
+    # gateway controls (CORS, rate limit, auth).
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: "{{ digital_energy_twin_apisix_namespace }}"
+      ports:
+        - protocol: TCP
+          port: {{ digital_energy_twin_backend_port | int }}

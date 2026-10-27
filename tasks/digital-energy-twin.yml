@@ -595,6 +595,21 @@
           </html>
   when: digital_energy_twin_enabled
 
+- name: "Digital Energy Twin: Ensure network policies for the app workloads"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition: "{{ lookup('template', addon_dir + 'templates/' + digital_energy_twin_app_netpol_template) | from_yaml }}"
+  loop:
+    - digital_energy_twin_backend_netpol.yaml.j2
+    - digital_energy_twin_admin_netpol.yaml.j2
+    - digital_energy_twin_public_netpol.yaml.j2
+  loop_control:
+    loop_var: digital_energy_twin_app_netpol_template
+  when: digital_energy_twin_enabled
+
 - name: "Digital Energy Twin: Ensure admin deployment"
   kubernetes.core.k8s:
     state: present
@@ -806,6 +821,32 @@
       Authorization: "Bearer {{ keycloak_login.json.access_token }}"
     status_code: 200
   register: digital_energy_twin_client_secret_response
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Ensure OIDC audience mapper for the backend"
+  uri:
+    method: POST
+    url: "{{ inv_access.platform.hostname }}/admin/realms/{{ inv_access.tenant.realm_name }}/clients/{{ digital_energy_twin_client_internal_id }}/protocol-mappers/models"
+    return_content: yes
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    body_format: json
+    # The backend validates aud == AUTH_EXPECTED_AUDIENCE (the DEZ client);
+    # without this mapper Keycloak only puts "account" in aud and every
+    # request is rejected.
+    body:
+      name: "digital-energy-twin-audience"
+      protocol: "openid-connect"
+      protocolMapper: "oidc-audience-mapper"
+      config:
+        included.client.audience: "{{ digital_energy_twin_oidc_client_id }}"
+        id.token.claim: "false"
+        access.token.claim: "true"
+    headers:
+      Accept: application/json
+      Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+    status_code:
+      - 201
+      - 409
   when: digital_energy_twin_enabled
 
 - name: "Digital Energy Twin: Ensure OIDC client role admin"

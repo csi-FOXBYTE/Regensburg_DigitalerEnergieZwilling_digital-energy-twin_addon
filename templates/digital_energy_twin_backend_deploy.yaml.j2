@@ -14,6 +14,7 @@ spec:
       labels:
         app: digital-energy-twin-backend
     spec:
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -27,6 +28,9 @@ spec:
             runAsNonRoot: true
             runAsUser: 1000
             allowPrivilegeEscalation: false
+            # zenstack/prisma unpacks its query engine outside /tmp during
+            # `migrate deploy`; a read-only root filesystem fails with EROFS.
+            # The init container is short-lived, non-root and drops all caps.
             readOnlyRootFilesystem: false
             capabilities:
               drop:
@@ -41,6 +45,12 @@ spec:
                 secretKeyRef:
                   name: "{{ digital_energy_twin_database_secret_name }}"
                   key: DATABASE_URL
+          resources:
+            requests:
+              cpu: "{{ digital_energy_twin_migrate_cpu_request | default('50m') }}"
+              memory: "{{ digital_energy_twin_migrate_memory_request | default('128Mi') }}"
+            limits:
+              memory: "{{ digital_energy_twin_migrate_memory_limit | default('256Mi') }}"
           volumeMounts:
             - name: tmp
               mountPath: /tmp
@@ -84,6 +94,12 @@ spec:
 {% endif %}
             - name: KEYCLOAK_JWKS_URI
               value: "{{ inv_access.platform.hostname }}/realms/{{ inv_access.tenant.realm_name }}/protocol/openid-connect/certs"
+            - name: KEYCLOAK_ISSUER
+              value: "{{ inv_access.platform.hostname }}/realms/{{ inv_access.tenant.realm_name }}"
+            # The backend requires aud to contain the DEZ client; an audience
+            # mapper on the OIDC client (see tasks) puts it into the token.
+            - name: AUTH_EXPECTED_AUDIENCE
+              value: "{{ digital_energy_twin_oidc_client_id }}"
             - name: TILES_URL
               value: "{{ digital_energy_twin_tiles_url }}"
             - name: TERRAIN_URL
@@ -96,6 +112,12 @@ spec:
               value: "https://{{ digital_energy_twin_public_direct_host }}"
             - name: ADMIN_CLIENT_BASE_URL
               value: "https://{{ digital_energy_twin_admin_direct_host }}"
+          resources:
+            requests:
+              cpu: "{{ digital_energy_twin_backend_cpu_request | default('50m') }}"
+              memory: "{{ digital_energy_twin_backend_memory_request | default('256Mi') }}"
+            limits:
+              memory: "{{ digital_energy_twin_backend_memory_limit | default('512Mi') }}"
           ports:
             - containerPort: {{ digital_energy_twin_backend_port | int }}
           startupProbe:
