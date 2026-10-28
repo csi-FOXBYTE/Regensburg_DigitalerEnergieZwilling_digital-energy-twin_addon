@@ -5,7 +5,7 @@
   "serialNumber": "urn:uuid:7b2a2026-1b40-59fb-9e75-b032c16af3c9",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-10-22T08:11:26.822091Z",
+    "timestamp": "2026-10-28T08:06:13.846163Z",
     "tools": {
       "components": [
         {
@@ -52,7 +52,7 @@
         },
         {
           "name": "vcs:commit",
-          "value": "fbb1e699c350187878aa1a363a1b1d02953e5471"
+          "value": "6150ccad6ff718f47a41cef11a9a93a00e803eac"
         },
         {
           "name": "sbom:source-state",
@@ -446,7 +446,7 @@
     },
     {
       "type": "container",
-      "bom-ref": "oci:docker.io/library/mariadb@sha256:6422478cb8e159f080fb1d8ccf65101e26fe51385787fde7d16c3b165a331f15",
+      "bom-ref": "oci:docker.io/library/mariadb@sha256:c4124d1afa875e47f2892edf26b482fa54f796e2f342d3717a04ca091a22a9bd",
       "name": "docker.io/library/mariadb",
       "version": "11.8.9",
       "scope": "optional",
@@ -926,7 +926,7 @@
         "component:postgres-operator@not-pinned",
         "component:postgresql@not-pinned",
         "component:traefik@not-pinned",
-        "oci:docker.io/library/mariadb@sha256:6422478cb8e159f080fb1d8ccf65101e26fe51385787fde7d16c3b165a331f15",
+        "oci:docker.io/library/mariadb@sha256:c4124d1afa875e47f2892edf26b482fa54f796e2f342d3717a04ca091a22a9bd",
         "oci:ghcr.io/csi-foxbyte/regensburg-web-adminfrontend@sha256:a2f864ad456b017be177a4f7dda7e5b12ba47d9cbdb966269b00b56521c21f94",
         "oci:ghcr.io/csi-foxbyte/regensburg-web-backend@sha256:fa66c1165de3310e230e72a70100272816afb472f8180e4dcbece5e6df56b6e9",
         "oci:ghcr.io/csi-foxbyte/regensburg-web-frontend@sha256:44875afb77ccc1512f8c746c02aa4830d07c3b1690d017509eb974ab5844409c",
@@ -961,7 +961,7 @@
       ]
     },
     {
-      "ref": "oci:docker.io/library/mariadb@sha256:6422478cb8e159f080fb1d8ccf65101e26fe51385787fde7d16c3b165a331f15",
+      "ref": "oci:docker.io/library/mariadb@sha256:c4124d1afa875e47f2892edf26b482fa54f796e2f342d3717a04ca091a22a9bd",
       "dependsOn": []
     },
     {
