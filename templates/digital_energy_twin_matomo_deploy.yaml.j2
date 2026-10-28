@@ -80,7 +80,7 @@ spec:
               cpu: "{{ digital_energy_twin_matomo_cpu_request | default('100m') }}"
               memory: "{{ digital_energy_twin_matomo_memory_request | default('256Mi') }}"
             limits:
-              memory: "{{ digital_energy_twin_matomo_memory_limit | default('512Mi') }}"
+              memory: "{{ digital_energy_twin_matomo_memory_limit | default('768Mi') }}"
           ports:
             - containerPort: 80
           startupProbe:

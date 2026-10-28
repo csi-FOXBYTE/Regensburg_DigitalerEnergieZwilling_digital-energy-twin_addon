@@ -74,6 +74,10 @@ spec:
                   key: DATABASE_URL
             - name: PORT
               value: "{{ digital_energy_twin_backend_port | string }}"
+            # Cap V8's heap below the memory limit so Node garbage-collects
+            # before the cgroup OOM-kills it (heap ~66% of the 768Mi limit).
+            - name: NODE_OPTIONS
+              value: "{{ digital_energy_twin_backend_node_options | default('--max-old-space-size=512') }}"
 {% if digital_energy_twin_feedback_mail_to | default("") %}
             - name: SMTP_URL
               valueFrom:
@@ -117,7 +121,7 @@ spec:
               cpu: "{{ digital_energy_twin_backend_cpu_request | default('50m') }}"
               memory: "{{ digital_energy_twin_backend_memory_request | default('256Mi') }}"
             limits:
-              memory: "{{ digital_energy_twin_backend_memory_limit | default('512Mi') }}"
+              memory: "{{ digital_energy_twin_backend_memory_limit | default('768Mi') }}"
           ports:
             - containerPort: {{ digital_energy_twin_backend_port | int }}
           startupProbe:
