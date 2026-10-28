@@ -116,6 +116,10 @@ spec:
               value: "https://{{ digital_energy_twin_public_direct_host }}"
             - name: ADMIN_CLIENT_BASE_URL
               value: "https://{{ digital_energy_twin_admin_direct_host }}"
+            # Extra CORS origins beyond public/admin host; the backend adds
+            # these to its allowlist (empty string = none).
+            - name: AUTH_CORS_ADDITIONAL_ORIGINS
+              value: "{{ digital_energy_twin.backend_cors_additional_origins | join(',') }}"
           resources:
             requests:
               cpu: "{{ digital_energy_twin_backend_cpu_request | default('50m') }}"
