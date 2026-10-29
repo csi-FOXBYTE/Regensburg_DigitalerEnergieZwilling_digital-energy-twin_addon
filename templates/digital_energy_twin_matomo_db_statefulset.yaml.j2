@@ -15,6 +15,7 @@ spec:
       labels:
         app: "{{ digital_energy_twin_matomo_db_name }}"
     spec:
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 999
@@ -52,6 +53,12 @@ spec:
                 secretKeyRef:
                   name: "{{ digital_energy_twin_matomo_db_secret_name }}"
                   key: password
+          resources:
+            requests:
+              cpu: "{{ digital_energy_twin_matomo_db_cpu_request | default('100m') }}"
+              memory: "{{ digital_energy_twin_matomo_db_memory_request | default('256Mi') }}"
+            limits:
+              memory: "{{ digital_energy_twin_matomo_db_memory_limit | default('512Mi') }}"
           ports:
             - name: mysql
               containerPort: 3306

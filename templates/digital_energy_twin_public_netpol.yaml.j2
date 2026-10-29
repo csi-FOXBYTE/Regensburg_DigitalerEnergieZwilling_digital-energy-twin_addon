@@ -1,0 +1,21 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: digital-energy-twin-public
+  labels:
+    app: digital-energy-twin-public
+spec:
+  podSelector:
+    matchLabels:
+      app: digital-energy-twin-public
+  policyTypes:
+    - Ingress
+  ingress:
+    # Only through APISIX: no pod may reach the public frontend directly.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: "{{ digital_energy_twin_apisix_namespace }}"
+      ports:
+        - protocol: TCP
+          port: {{ digital_energy_twin_public_port | int }}

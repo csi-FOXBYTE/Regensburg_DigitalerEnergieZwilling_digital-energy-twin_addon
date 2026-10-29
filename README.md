@@ -753,7 +753,7 @@ kubectl -n NS delete job matomo-backup-manual
      restartPolicy: Never
      containers:
        - name: restore
-         image: docker.io/library/mariadb:11.8.9@sha256:6422478cb8e159f080fb1d8ccf65101e26fe51385787fde7d16c3b165a331f15
+         image: docker.io/library/mariadb:11.8.9@sha256:c4124d1afa875e47f2892edf26b482fa54f796e2f342d3717a04ca091a22a9bd
          command: ["sleep", "3600"]
          env:
            - name: DB_PASSWORD
@@ -801,7 +801,7 @@ spec:
   restartPolicy: Never
   containers:
     - name: mariadb
-      image: docker.io/library/mariadb:11.8.9@sha256:6422478cb8e159f080fb1d8ccf65101e26fe51385787fde7d16c3b165a331f15
+      image: docker.io/library/mariadb:11.8.9@sha256:c4124d1afa875e47f2892edf26b482fa54f796e2f342d3717a04ca091a22a9bd
       env:
         - {name: MARIADB_ROOT_PASSWORD, value: restore-test}
         - {name: MARIADB_DATABASE, value: matomo}

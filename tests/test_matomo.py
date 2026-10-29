@@ -449,6 +449,8 @@ class MatomoTests(unittest.TestCase):
                    "digital_energy_twin_terrain_url": "t", "digital_energy_twin_address_database_url": "a",
                    "digital_energy_twin_backend_direct_host": "api", "digital_energy_twin_public_direct_host": "det",
                    "digital_energy_twin_admin_direct_host": "admin",
+                   "digital_energy_twin_oidc_client_id": "digital-energy-twin",
+                   "digital_energy_twin_backend_cors_additional_origins": "",
                    "inv_access": {"platform": {"hostname": "https://idm"}, "tenant": {"realm_name": "dez"}},
                    "digital_energy_twin_matomo_host": "matomo.det.example.test", "digital_energy_twin_matomo_site_id": "3"}
         for tracking_on, expected in ((False, {}), (True, {"MATOMO_URL": "https://matomo.det.example.test/matomo.php",

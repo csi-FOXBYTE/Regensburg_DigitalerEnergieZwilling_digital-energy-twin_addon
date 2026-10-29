@@ -53,7 +53,7 @@
   "additionalComponents": [
     {
       "type": "container",
-      "bom-ref": "oci:docker.io/library/mariadb@sha256:6422478cb8e159f080fb1d8ccf65101e26fe51385787fde7d16c3b165a331f15",
+      "bom-ref": "oci:docker.io/library/mariadb@sha256:c4124d1afa875e47f2892edf26b482fa54f796e2f342d3717a04ca091a22a9bd",
       "name": "docker.io/library/mariadb",
       "version": "11.8.9",
       "scope": "optional",

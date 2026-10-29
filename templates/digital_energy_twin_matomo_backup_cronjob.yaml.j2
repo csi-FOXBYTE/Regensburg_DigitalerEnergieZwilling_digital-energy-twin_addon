@@ -20,6 +20,7 @@ spec:
             app: "{{ digital_energy_twin_matomo_backup_name }}"
         spec:
           restartPolicy: Never
+          automountServiceAccountToken: false
           # The Matomo volume is ReadWriteOnce: run on the node where Matomo runs.
           affinity:
             podAffinity:
@@ -46,6 +47,12 @@ spec:
                     - ALL
                   add:
                     - CHOWN
+              resources:
+                requests:
+                  cpu: "{{ digital_energy_twin_matomo_backup_cpu_request | default('50m') }}"
+                  memory: "{{ digital_energy_twin_matomo_backup_memory_request | default('64Mi') }}"
+                limits:
+                  memory: "{{ digital_energy_twin_matomo_backup_memory_limit | default('256Mi') }}"
               volumeMounts:
                 - name: backup
                   mountPath: /backup
@@ -75,6 +82,12 @@ spec:
                       key: password
                 - name: KEEP_DAYS
                   value: "{{ digital_energy_twin_matomo_backup_keep_days }}"
+              resources:
+                requests:
+                  cpu: "{{ digital_energy_twin_matomo_backup_cpu_request | default('50m') }}"
+                  memory: "{{ digital_energy_twin_matomo_backup_memory_request | default('64Mi') }}"
+                limits:
+                  memory: "{{ digital_energy_twin_matomo_backup_memory_limit | default('256Mi') }}"
               command: ["bash", "-c"]
               args:
                 - |

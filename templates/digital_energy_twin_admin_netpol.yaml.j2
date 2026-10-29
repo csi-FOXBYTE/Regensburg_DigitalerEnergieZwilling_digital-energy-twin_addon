@@ -1,0 +1,21 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: digital-energy-twin-admin
+  labels:
+    app: digital-energy-twin-admin
+spec:
+  podSelector:
+    matchLabels:
+      app: digital-energy-twin-admin
+  policyTypes:
+    - Ingress
+  ingress:
+    # Only through APISIX: no pod may reach the admin frontend directly.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: "{{ digital_energy_twin_apisix_namespace }}"
+      ports:
+        - protocol: TCP
+          port: {{ digital_energy_twin_admin_port | int }}

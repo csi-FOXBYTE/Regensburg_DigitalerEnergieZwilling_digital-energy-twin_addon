@@ -20,6 +20,7 @@ spec:
         # The entrypoint reads the client secret only on start.
         checksum/oidc-client-secret: "{{ digital_energy_twin_matomo_client_secret.json.value | hash('sha256') }}"
     spec:
+      automountServiceAccountToken: false
       securityContext:
         seccompProfile:
           type: RuntimeDefault
@@ -74,6 +75,12 @@ spec:
             - name: MATOMO_OIDC_BACKCHANNEL_URL
               value: "{{ digital_energy_twin_matomo_keycloak_internal_url | regex_replace('/+$', '') }}/realms/{{ inv_access.tenant.realm_name }}"
 {% endif %}
+          resources:
+            requests:
+              cpu: "{{ digital_energy_twin_matomo_cpu_request | default('100m') }}"
+              memory: "{{ digital_energy_twin_matomo_memory_request | default('256Mi') }}"
+            limits:
+              memory: "{{ digital_energy_twin_matomo_memory_limit | default('768Mi') }}"
           ports:
             - containerPort: 80
           startupProbe:
