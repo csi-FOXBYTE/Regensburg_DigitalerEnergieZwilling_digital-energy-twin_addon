@@ -15,14 +15,18 @@
       - digital_energy_twin.public_host is defined
       - digital_energy_twin.backend_host is defined
       - digital_energy_twin.backend_cors_additional_origins is defined
+      - digital_energy_twin.backend_cors_additional_origins is not string
+      - digital_energy_twin.backend_cors_additional_origins is iterable
       - digital_energy_twin.tiles_url is defined
       - digital_energy_twin.terrain_url is defined
       - digital_energy_twin.address_database_url is defined
+      - inv_access.platform.hostname | default('') is match('^https://')
     fail_msg: >-
-      Missing required keys in inv_addons['digital-energy-twin'].
+      Missing or invalid keys in inv_addons['digital-energy-twin'].
       Expected: enable, ns_create, ns_name, ns_kubeconfig, oidc_client_id,
-      admin_host, public_host, backend_host, backend_cors_additional_origins,
-      tiles_url, terrain_url, address_database_url.
+      admin_host, public_host, backend_host, backend_cors_additional_origins
+      (a list), tiles_url, terrain_url, address_database_url. The backend refuses
+      a non-HTTPS KEYCLOAK_JWKS_URI, so inv_access.platform.hostname must be https://.
 
 - name: "Digital Energy Twin: Select routing mode"
   ansible.builtin.set_fact:
@@ -212,6 +216,7 @@
     digital_energy_twin_admin_direct_host: "{{ digital_energy_twin.admin_host }}"
     digital_energy_twin_public_direct_host: "{{ digital_energy_twin.public_host }}"
     digital_energy_twin_backend_direct_host: "{{ digital_energy_twin.backend_host }}"
+    digital_energy_twin_backend_cors_additional_origins: "{{ digital_energy_twin.backend_cors_additional_origins | join(',') }}"
     digital_energy_twin_application_version: "{{ digital_energy_twin_application_release.manifest.appVersion if digital_energy_twin_application_release is defined else '' }}"
     digital_energy_twin_admin_image: "{{ digital_energy_twin_application_release.manifest.adminfrontend.image ~ '@' ~ digital_energy_twin_application_release.manifest.adminfrontend.digest if digital_energy_twin_application_release is defined else software['digital-energy-twin'].admin.registry ~ '/' ~ software['digital-energy-twin'].admin.repository ~ ':' ~ software['digital-energy-twin'].admin.tag }}"
     digital_energy_twin_public_image: "{{ digital_energy_twin_application_release.manifest.frontend.image ~ '@' ~ digital_energy_twin_application_release.manifest.frontend.digest if digital_energy_twin_application_release is defined else software['digital-energy-twin'].public.registry ~ '/' ~ software['digital-energy-twin'].public.repository ~ ':' ~ software['digital-energy-twin'].public.tag }}"
@@ -823,17 +828,27 @@
   register: digital_energy_twin_client_secret_response
   when: digital_energy_twin_enabled
 
-- name: "Digital Energy Twin: Ensure OIDC audience mapper for the backend"
+# The backend validates aud == AUTH_EXPECTED_AUDIENCE (the DEZ client); without
+# this mapper Keycloak only puts "account" in aud and every request is rejected.
+# Created if missing, updated if present, so a stale mapper is corrected instead
+# of being left as-is on a 409.
+- name: "Digital Energy Twin: Get OIDC protocol mappers"
   uri:
-    method: POST
+    method: GET
     url: "{{ inv_access.platform.hostname }}/admin/realms/{{ inv_access.tenant.realm_name }}/clients/{{ digital_energy_twin_client_internal_id }}/protocol-mappers/models"
     return_content: yes
     ca_path: "{{ inv_k8s.ingress.ca_path }}"
-    body_format: json
-    # The backend validates aud == AUTH_EXPECTED_AUDIENCE (the DEZ client);
-    # without this mapper Keycloak only puts "account" in aud and every
-    # request is rejected.
-    body:
+    headers:
+      Accept: application/json
+      Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+    status_code: 200
+  register: digital_energy_twin_protocol_mappers
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Resolve the audience mapper state"
+  ansible.builtin.set_fact:
+    digital_energy_twin_audience_mapper_id: "{{ (digital_energy_twin_protocol_mappers.json | selectattr('name', 'equalto', 'digital-energy-twin-audience') | map(attribute='id') | list | first) | default('') }}"
+    digital_energy_twin_audience_mapper_body:
       name: "digital-energy-twin-audience"
       protocol: "openid-connect"
       protocolMapper: "oidc-audience-mapper"
@@ -841,12 +856,40 @@
         included.client.audience: "{{ digital_energy_twin_oidc_client_id }}"
         id.token.claim: "false"
         access.token.claim: "true"
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Create OIDC audience mapper for the backend"
+  uri:
+    method: POST
+    url: "{{ inv_access.platform.hostname }}/admin/realms/{{ inv_access.tenant.realm_name }}/clients/{{ digital_energy_twin_client_internal_id }}/protocol-mappers/models"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    body_format: json
+    body: "{{ digital_energy_twin_audience_mapper_body }}"
     headers:
       Accept: application/json
       Authorization: "Bearer {{ keycloak_login.json.access_token }}"
     status_code:
       - 201
       - 409
+  when:
+    - digital_energy_twin_enabled
+    - not digital_energy_twin_audience_mapper_id
+
+- name: "Digital Energy Twin: Update the OIDC audience mapper to the desired config"
+  uri:
+    method: PUT
+    url: "{{ inv_access.platform.hostname }}/admin/realms/{{ inv_access.tenant.realm_name }}/clients/{{ digital_energy_twin_client_internal_id }}/protocol-mappers/models/{{ digital_energy_twin_audience_mapper_id }}"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    body_format: json
+    body: "{{ digital_energy_twin_audience_mapper_body | combine({'id': digital_energy_twin_audience_mapper_id}) }}"
+    headers:
+      Accept: application/json
+      Authorization: "Bearer {{ keycloak_login.json.access_token }}"
+    status_code:
+      - 204
+  when:
+    - digital_energy_twin_enabled
+    - digital_energy_twin_audience_mapper_id | length > 0
   when: digital_energy_twin_enabled
 
 - name: "Digital Energy Twin: Ensure OIDC client role admin"

@@ -45,12 +45,16 @@ spec:
                 secretKeyRef:
                   name: "{{ digital_energy_twin_database_secret_name }}"
                   key: DATABASE_URL
+            # zenstack/prisma loads the client and query engine; cap the heap
+            # below the limit (~66%) so it GCs before the cgroup OOM-kills it.
+            - name: NODE_OPTIONS
+              value: "{{ digital_energy_twin_migrate_node_options | default('--max-old-space-size=' ~ (((digital_energy_twin_migrate_memory_limit_mb | default(512)) * 0.66) | int)) }}"
           resources:
             requests:
               cpu: "{{ digital_energy_twin_migrate_cpu_request | default('50m') }}"
               memory: "{{ digital_energy_twin_migrate_memory_request | default('128Mi') }}"
             limits:
-              memory: "{{ digital_energy_twin_migrate_memory_limit | default('256Mi') }}"
+              memory: "{{ digital_energy_twin_migrate_memory_limit_mb | default(512) }}Mi"
           volumeMounts:
             - name: tmp
               mountPath: /tmp
@@ -75,9 +79,10 @@ spec:
             - name: PORT
               value: "{{ digital_energy_twin_backend_port | string }}"
             # Cap V8's heap below the memory limit so Node garbage-collects
-            # before the cgroup OOM-kills it (heap ~66% of the 768Mi limit).
+            # before the cgroup OOM-kills it (heap ~66% of the limit). Derived
+            # from the limit so overriding one value keeps both in lockstep.
             - name: NODE_OPTIONS
-              value: "{{ digital_energy_twin_backend_node_options | default('--max-old-space-size=512') }}"
+              value: "{{ digital_energy_twin_backend_node_options | default('--max-old-space-size=' ~ (((digital_energy_twin_backend_memory_limit_mb | default(768)) * 0.66) | int)) }}"
 {% if digital_energy_twin_feedback_mail_to | default("") %}
             - name: SMTP_URL
               valueFrom:
@@ -119,13 +124,13 @@ spec:
             # Extra CORS origins beyond public/admin host; the backend adds
             # these to its allowlist (empty string = none).
             - name: AUTH_CORS_ADDITIONAL_ORIGINS
-              value: "{{ digital_energy_twin.backend_cors_additional_origins | join(',') }}"
+              value: "{{ digital_energy_twin_backend_cors_additional_origins }}"
           resources:
             requests:
               cpu: "{{ digital_energy_twin_backend_cpu_request | default('50m') }}"
               memory: "{{ digital_energy_twin_backend_memory_request | default('256Mi') }}"
             limits:
-              memory: "{{ digital_energy_twin_backend_memory_limit | default('768Mi') }}"
+              memory: "{{ digital_energy_twin_backend_memory_limit_mb | default(768) }}Mi"
           ports:
             - containerPort: {{ digital_energy_twin_backend_port | int }}
           startupProbe:
