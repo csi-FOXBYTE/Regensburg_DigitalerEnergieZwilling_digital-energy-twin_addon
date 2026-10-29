@@ -5,7 +5,7 @@
   "serialNumber": "urn:uuid:7b2a2026-1b40-59fb-9e75-b032c16af3c9",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-10-28T08:06:13.846163Z",
+    "timestamp": "2026-10-29T13:54:00.404299Z",
     "tools": {
       "components": [
         {
@@ -52,7 +52,7 @@
         },
         {
           "name": "vcs:commit",
-          "value": "6150ccad6ff718f47a41cef11a9a93a00e803eac"
+          "value": "f0671e4f33653bf8533740272f97c1e7f16f7795"
         },
         {
           "name": "sbom:source-state",
@@ -354,9 +354,9 @@
     },
     {
       "type": "container",
-      "bom-ref": "oci:ghcr.io/csi-foxbyte/regensburg-web-matomo@sha256:5fb25a9c2291a838a48c937995acd9369dce3166d9b33cace88dc39a2b4c7bfb",
+      "bom-ref": "oci:ghcr.io/csi-foxbyte/regensburg-web-matomo@sha256:2f36c6802894835439bdcbf36b9a46beaa8ec90e23f4ac8c30d8e3f2946a6474",
       "name": "ghcr.io/csi-foxbyte/regensburg-web-matomo",
-      "version": "build-39745409139-1",
+      "version": "build-40885758884-1",
       "scope": "optional",
       "licenses": [
         {
@@ -388,15 +388,15 @@
         },
         {
           "name": "regensburg:image-digest",
-          "value": "sha256:5fb25a9c2291a838a48c937995acd9369dce3166d9b33cace88dc39a2b4c7bfb"
+          "value": "sha256:2f36c6802894835439bdcbf36b9a46beaa8ec90e23f4ac8c30d8e3f2946a6474"
         },
         {
           "name": "regensburg:build",
-          "value": "39745409139-1"
+          "value": "40885758884-1"
         },
         {
           "name": "regensburg:release-source",
-          "value": "fbb1e699c350187878aa1a363a1b1d02953e5471"
+          "value": "f0671e4f33653bf8533740272f97c1e7f16f7795"
         },
         {
           "name": "sbom:child-bom-path",
@@ -404,7 +404,7 @@
         },
         {
           "name": "sbom:child-bom-link",
-          "value": "urn:cdx:da78cb36-aec8-5f85-b7a0-85c2ca107f95/1"
+          "value": "urn:cdx:46e7daee-b4bd-5995-a883-5a07f813376d/1"
         },
         {
           "name": "sbom:release-repository",
@@ -414,16 +414,16 @@
       "externalReferences": [
         {
           "type": "bom",
-          "url": "urn:cdx:da78cb36-aec8-5f85-b7a0-85c2ca107f95/1",
+          "url": "urn:cdx:46e7daee-b4bd-5995-a883-5a07f813376d/1",
           "comment": "CycloneDX BOM-Link for the verified child SBOM bundled at sboms/matomo.cdx.json.",
           "hashes": [
             {
               "alg": "SHA-256",
-              "content": "16cea4e455683fc3e73b79f6d0eed52a058f6739578ab7b1af4354d592746259"
+              "content": "ecce236d924723d5090dd17a371369323417be3bd7744b74ec934d1c3434b390"
             },
             {
               "alg": "SHA-512",
-              "content": "cffd2ef58b7cf91a19930ec6ca93fbf195d9268255fc48a0a38173a24c2bb88b6dbec3a0f447c26c59893a6b165826631ce1ae2a2409045004438de471090446"
+              "content": "3bc01d52a66009228ecb9de7e0e3641e4efd5664a5900970a7c42fc851b40083d76439e5926a75e43039a255254e27c645228bec74573b0d74a269b491e0c9a5"
             }
           ]
         },
@@ -434,11 +434,11 @@
           "hashes": [
             {
               "alg": "SHA-256",
-              "content": "16cea4e455683fc3e73b79f6d0eed52a058f6739578ab7b1af4354d592746259"
+              "content": "ecce236d924723d5090dd17a371369323417be3bd7744b74ec934d1c3434b390"
             },
             {
               "alg": "SHA-512",
-              "content": "cffd2ef58b7cf91a19930ec6ca93fbf195d9268255fc48a0a38173a24c2bb88b6dbec3a0f447c26c59893a6b165826631ce1ae2a2409045004438de471090446"
+              "content": "3bc01d52a66009228ecb9de7e0e3641e4efd5664a5900970a7c42fc851b40083d76439e5926a75e43039a255254e27c645228bec74573b0d74a269b491e0c9a5"
             }
           ]
         }
@@ -930,7 +930,7 @@
         "oci:ghcr.io/csi-foxbyte/regensburg-web-adminfrontend@sha256:a2f864ad456b017be177a4f7dda7e5b12ba47d9cbdb966269b00b56521c21f94",
         "oci:ghcr.io/csi-foxbyte/regensburg-web-backend@sha256:fa66c1165de3310e230e72a70100272816afb472f8180e4dcbece5e6df56b6e9",
         "oci:ghcr.io/csi-foxbyte/regensburg-web-frontend@sha256:44875afb77ccc1512f8c746c02aa4830d07c3b1690d017509eb974ab5844409c",
-        "oci:ghcr.io/csi-foxbyte/regensburg-web-matomo@sha256:5fb25a9c2291a838a48c937995acd9369dce3166d9b33cace88dc39a2b4c7bfb",
+        "oci:ghcr.io/csi-foxbyte/regensburg-web-matomo@sha256:2f36c6802894835439bdcbf36b9a46beaa8ec90e23f4ac8c30d8e3f2946a6474",
         "pkg:ansible/kubernetes.core@not-pinned",
         "pkg:pypi/ansible-core@not-pinned",
         "pkg:pypi/jmespath@not-pinned"
@@ -955,9 +955,9 @@
       ]
     },
     {
-      "ref": "oci:ghcr.io/csi-foxbyte/regensburg-web-matomo@sha256:5fb25a9c2291a838a48c937995acd9369dce3166d9b33cace88dc39a2b4c7bfb",
+      "ref": "oci:ghcr.io/csi-foxbyte/regensburg-web-matomo@sha256:2f36c6802894835439bdcbf36b9a46beaa8ec90e23f4ac8c30d8e3f2946a6474",
       "dependsOn": [
-        "urn:cdx:da78cb36-aec8-5f85-b7a0-85c2ca107f95/1#regensburg%3Amatomo%3Abuild-39745409139-1"
+        "urn:cdx:46e7daee-b4bd-5995-a883-5a07f813376d/1#regensburg%3Amatomo%3Abuild-40885758884-1"
       ]
     },
     {
