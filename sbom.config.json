@@ -1,11 +1,11 @@
 {
-  "releaseTag": "v1.8.2",
+  "releaseTag": "v1.8.3",
   "repositorySlug": "csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon",
   "rootComponent": {
     "type": "application",
-    "bom-ref": "pkg:generic/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon@1.8.2",
+    "bom-ref": "pkg:generic/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon@1.8.3",
     "name": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon",
-    "version": "1.8.2",
+    "version": "1.8.3",
     "description": "Civitas Core addon that deploys and integrates the Regensburg digital energy twin application.",
     "licenses": [
       {
@@ -14,7 +14,7 @@
         }
       }
     ],
-    "purl": "pkg:generic/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon@1.8.2"
+    "purl": "pkg:generic/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon@1.8.3"
   },
   "imageComponents": [
     {
