@@ -890,7 +890,6 @@
   when:
     - digital_energy_twin_enabled
     - digital_energy_twin_audience_mapper_id | length > 0
-  when: digital_energy_twin_enabled
 
 - name: "Digital Energy Twin: Ensure OIDC client role admin"
   uri:
