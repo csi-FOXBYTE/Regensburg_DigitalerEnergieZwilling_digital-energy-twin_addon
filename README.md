@@ -967,6 +967,37 @@ CORS defaults to:
 
 You can extend allowed origins with `backend_cors_additional_origins`.
 
+### Frontend security headers
+
+The HTML routes of both frontends (`public_host` and `admin_host`) send
+`X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`,
+`Permissions-Policy`, HSTS and a Content-Security-Policy per frontend. Neither
+frontend may be embedded in another site (`frame-ancestors 'none'`).
+
+The public CSP allows connections to the origins of `tiles_url`, `terrain_url`
+and `address_database_url`, the basemap at `intergeo38.bayernwolke.de` and, when
+deployed, Matomo. Its scripts need `'unsafe-inline'` (Astro's inline island
+scripts) and `'unsafe-eval'`/`'wasm-unsafe-eval'` (Cesium and the calculation
+core). The admin CSP allows no inline scripts. Both load Google Fonts; the admin
+dashboard map loads OpenStreetMap tiles. If a frontend starts loading from a new
+host, the policy in `tasks/digital-energy-twin.yml` must list it.
+
+### Admin sessions
+
+APISIX keeps the admin session in the `det_admin_session` cookie (`Secure`,
+`HttpOnly`, `SameSite=Lax`; `det_api_session` on `backend_host`). The cookie is
+signed with a secret the addon generates once and keeps in the Secret
+`digital-energy-twin-oidc-session`; set `digital_energy_twin_oidc_session_secret`
+in the inventory to use your own (at least 16 characters). APISIX releases
+before lua-resty-session 4 accept no cookie options; the addon then reports that
+the cookie keeps its defaults.
+
+On every request to a protected route the gateway checks the role and asks
+Keycloak (token introspection) whether the session is still active. A logout,
+an ended Keycloak session or a revoked user therefore takes effect within
+`session_check_ttl` seconds (default `5`, per APISIX worker), not only when the
+access token expires. Pages then log the user out, API calls get `401`.
+
 ## Security Requirements
 
 - Non-root container runtime is enforced via pod/container `securityContext` in all deployment templates,
