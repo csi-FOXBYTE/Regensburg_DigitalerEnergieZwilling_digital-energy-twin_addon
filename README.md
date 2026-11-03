@@ -481,7 +481,7 @@ login; an already open Matomo session lasts until it expires.
 ### Matomo image
 
 The image is built from [images/matomo](images/matomo/README.md): the official
-`matomo:5.14.0-apache` image with the LoginOIDC and NoPasswordReset plugins and
+`matomo:5.14.2-apache` image with the LoginOIDC and NoPasswordReset plugins and
 an entrypoint that writes the Keycloak settings. The app release does not
 contain it, so a Matomo change needs no app release.
 
