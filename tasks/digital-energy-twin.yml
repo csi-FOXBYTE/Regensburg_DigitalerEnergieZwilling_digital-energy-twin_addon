@@ -224,6 +224,8 @@
     digital_energy_twin_matomo_image: "{{ digital_energy_twin_matomo_release.image ~ '@' ~ digital_energy_twin_matomo_release.digest if digital_energy_twin_matomo_release is defined else '' }}"
     digital_energy_twin_database_secret_name: "digital-energy-twin-database"
     digital_energy_twin_smtp_secret_name: "digital-energy-twin-smtp"
+    digital_energy_twin_oidc_session_secret_name: "digital-energy-twin-oidc-session"
+    digital_energy_twin_session_check_ttl: "{{ digital_energy_twin.session_check_ttl | default(5) | int }}"
     digital_energy_twin_feedback_mail_to: "{{ digital_energy_twin.feedback_mail_to | default('') | trim }}"
     digital_energy_twin_backend_port: "{{ digital_energy_twin.backend_port | default(5000) | int }}"
     digital_energy_twin_admin_port: "{{ digital_energy_twin.admin_port | default(8080) | int }}"
@@ -309,6 +311,36 @@
     digital_energy_twin_matomo_backup_schedule: "{{ (digital_energy_twin_matomo_config.backup | default({})).schedule | default('30 2 * * *') }}"
     digital_energy_twin_matomo_backup_keep_days: "{{ (digital_energy_twin_matomo_config.backup | default({})).keep_days | default(14) | int }}"
     digital_energy_twin_matomo_backup_size: "{{ (digital_energy_twin_matomo_config.backup | default({})).size | default('10Gi') }}"
+
+# The frontends' HTML gets the API headers plus a CSP measured against the apps:
+# Astro inlines its island scripts, Cesium and the calculation core compile code
+# at runtime (eval, WebAssembly) and Cesium decodes in blob workers. Tiles,
+# terrain and the address database are reached through backend redirects.
+- name: "Digital Energy Twin: Set origins the public frontend connects to"
+  ansible.builtin.set_fact:
+    digital_energy_twin_public_connect_origins: >-
+      {% set origins = [] %}{% for url in [digital_energy_twin.tiles_url, digital_energy_twin.terrain_url, digital_energy_twin.address_database_url] %}{% set _ = origins.append((url | urlsplit('scheme')) ~ '://' ~ (url | urlsplit('netloc'))) %}{% endfor %}{{ (origins + ['https://intergeo38.bayernwolke.de'] + (['https://' ~ digital_energy_twin_matomo_host] if digital_energy_twin_matomo_enabled else [])) | unique | join(' ') }}
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Set security headers for the frontend HTML"
+  ansible.builtin.set_fact:
+    digital_energy_twin_html_security_headers:
+      X-Content-Type-Options: "nosniff"
+      X-Frame-Options: "DENY"
+      Referrer-Policy: "strict-origin-when-cross-origin"
+      Permissions-Policy: "geolocation=(), microphone=(), camera=()"
+      Strict-Transport-Security: "max-age=31536000; includeSubDomains"
+    digital_energy_twin_public_csp: >-
+      default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval';
+      style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com;
+      img-src 'self' data: blob:; connect-src 'self' data: blob: {{ digital_energy_twin_public_connect_origins }};
+      worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+    digital_energy_twin_admin_csp: >-
+      default-src 'self'; script-src 'self' 'unsafe-eval';
+      style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com;
+      img-src 'self' data: https://*.tile.openstreetmap.org; connect-src 'self';
+      object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  when: digital_energy_twin_enabled
 
 - name: "Digital Energy Twin: Report skipped Matomo"
   ansible.builtin.debug:
@@ -950,6 +982,201 @@
       - 409
   when: digital_energy_twin_enabled
 
+# APISIX 3.x with lua-resty-session 4 takes flat session options (cookie_secure,
+# cookie_same_site, ...); older releases only know session.secret and ignore the
+# rest. The schema of the running APISIX decides which form is sent.
+- name: "Digital Energy Twin: Read the openid-connect plugin schema"
+  uri:
+    method: GET
+    url: "https://api-admin.{{ DOMAIN }}/apisix/admin/schema/plugins/openid-connect"
+    ca_path: "{{ inv_k8s.ingress.ca_path }}"
+    headers:
+      Accept: application/json
+      X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
+    status_code: 200
+  register: digital_energy_twin_oidc_schema_response
+  when: digital_energy_twin_enabled
+
+- name: "Digital Energy Twin: Get OIDC session secret"
+  kubernetes.core.k8s_info:
+    kind: Secret
+    namespace: "{{ k8s_namespace }}"
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    name: "{{ digital_energy_twin_oidc_session_secret_name }}"
+  register: digital_energy_twin_oidc_session_secret_info
+  when: digital_energy_twin_enabled and digital_energy_twin_oidc_session_secret is not defined
+  no_log: true
+
+# Generated once and kept, so a redeploy does not end every admin session.
+- name: "Digital Energy Twin: Create OIDC session secret once"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: "{{ digital_energy_twin_oidc_session_secret_name }}"
+      type: Opaque
+      stringData:
+        secret: "{{ lookup('ansible.builtin.password', '/dev/null', length=64, chars=['ascii_letters', 'digits']) }}"
+  when: >-
+    digital_energy_twin_enabled and digital_energy_twin_oidc_session_secret is not defined
+    and digital_energy_twin_oidc_session_secret_info.resources | length == 0
+  no_log: true
+
+- name: "Digital Energy Twin: Read OIDC session secret"
+  kubernetes.core.k8s_info:
+    kind: Secret
+    namespace: "{{ k8s_namespace }}"
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    name: "{{ digital_energy_twin_oidc_session_secret_name }}"
+  register: digital_energy_twin_oidc_session_secret_info
+  when: digital_energy_twin_enabled and digital_energy_twin_oidc_session_secret is not defined
+  no_log: true
+
+- name: "Digital Energy Twin: Select OIDC session form"
+  ansible.builtin.set_fact:
+    digital_energy_twin_oidc_session_flat: >-
+      {{ 'cookie_secure' in (digital_energy_twin_oidc_schema_response.json.properties.session.properties | default({})) }}
+    digital_energy_twin_oidc_session_key: >-
+      {{ digital_energy_twin_oidc_session_secret if digital_energy_twin_oidc_session_secret is defined
+      else digital_energy_twin_oidc_session_secret_info.resources[0].data.secret | b64decode }}
+  when: digital_energy_twin_enabled
+  no_log: true
+
+- name: "Digital Energy Twin: Set OIDC session settings"
+  ansible.builtin.set_fact:
+    digital_energy_twin_oidc_session: >-
+      {{ {'secret': digital_energy_twin_oidc_session_key}
+      | combine({'cookie_path': '/', 'cookie_secure': true, 'cookie_http_only': true, 'cookie_same_site': 'Lax'}
+      if digital_energy_twin_oidc_session_flat else {}) }}
+  when: digital_energy_twin_enabled
+  no_log: true
+
+- name: "Digital Energy Twin: Report session cookie attributes this APISIX cannot set"
+  ansible.builtin.debug:
+    msg: >-
+      This APISIX release takes no session cookie options, so the admin session cookie keeps
+      its defaults (no Secure flag). Upgrade APISIX to 3.x with lua-resty-session 4 to set them.
+  when: digital_energy_twin_enabled and not digital_energy_twin_oidc_session_flat
+
+# Runs before proxying on every protected route. Besides the role check it asks
+# Keycloak whether the access token's session is still active: the gateway keeps
+# the session in the cookie and would otherwise accept a logged-out cookie until
+# the access token expires. Results are cached per worker for a few seconds.
+# TLS to Keycloak is not verified, like the openid-connect plugin's default.
+- name: "Digital Energy Twin: Set the admin gate for protected routes"
+  ansible.builtin.set_fact:
+    digital_energy_twin_admin_gate_function: |-
+      local core = require("apisix.core")
+      local http = require("resty.http")
+      local required_client = "{{ digital_energy_twin_oidc_client_id }}"
+      local client_secret = "{{ digital_energy_twin_client_secret_response.json.value }}"
+      local introspection_endpoint = "{{ inv_access.platform.hostname }}/realms/{{ inv_access.tenant.realm_name }}/protocol/openid-connect/token/introspect"
+      local allowed_roles = {
+        ["{{ digital_energy_twin_admin_required_role }}"] = true,
+        ["{{ digital_energy_twin_manager_required_role }}"] = true,
+        ["{{ digital_energy_twin_maintainer_required_role }}"] = true
+      }
+      -- invalid_stale: APISIX's lrucache would otherwise keep serving expired
+      -- entries, and a cached "active" would outlive the logout.
+      local session_states = core.lrucache.new({
+        ttl = {{ digital_energy_twin_session_check_ttl }}, count = 1024, invalid_stale = true
+      })
+
+      local function has_any_required_role_from_jwt(jwt_token)
+        if type(jwt_token) ~= "string" or jwt_token == "" then
+          return false
+        end
+        local _, _, payload_b64 = string.find(jwt_token, "^[^.]+%.([^.]+)%.")
+        if not payload_b64 then
+          return false
+        end
+        payload_b64 = payload_b64:gsub("-", "+"):gsub("_", "/")
+        local mod = #payload_b64 % 4
+        if mod > 0 then
+          payload_b64 = payload_b64 .. string.rep("=", 4 - mod)
+        end
+        local payload_json = ngx.decode_base64(payload_b64)
+        if not payload_json then
+          return false
+        end
+        local payload = core.json.decode(payload_json)
+        if not payload then
+          return false
+        end
+        local resource_access = payload["resource_access"] or {}
+        local client_entry = resource_access[required_client] or {}
+        local roles = client_entry["roles"] or {}
+        for _, role in ipairs(roles) do
+          if allowed_roles[role] then
+            return true
+          end
+        end
+        return false
+      end
+
+      -- Returns nil when Keycloak cannot answer, so the failure is not cached.
+      local function introspect(token)
+        local httpc = http.new()
+        httpc:set_timeout(3000)
+        local res, err = httpc:request_uri(introspection_endpoint, {
+          method = "POST",
+          body = ngx.encode_args({
+            token = token,
+            token_type_hint = "access_token",
+            client_id = required_client,
+            client_secret = client_secret
+          }),
+          headers = { ["Content-Type"] = "application/x-www-form-urlencoded" },
+          ssl_verify = false
+        })
+        if not res or res.status ~= 200 then
+          core.log.error("token introspection failed: ", err or res.status)
+          return nil
+        end
+        local body = core.json.decode(res.body)
+        return { active = type(body) == "table" and body.active == true }
+      end
+
+      local function reject(status, message)
+        ngx.status = status
+        ngx.header["Content-Type"] = "application/json"
+        ngx.say(core.json.encode({ message = message }))
+        return ngx.exit(status)
+      end
+
+      return function()
+          local headers = ngx.req.get_headers()
+          local token = headers["X-Access-Token"] or headers["x-access-token"]
+          if type(token) == "table" then
+            token = token[1]
+          end
+
+          if not has_any_required_role_from_jwt(token) then
+            return reject(403, "forbidden: missing required role")
+          end
+
+          local state = session_states(token, nil, introspect, token)
+          if not state then
+            return reject(503, "identity provider unavailable")
+          end
+          if state.active then
+            return
+          end
+          -- Ended session: pages log out (and so back in), API calls get 401.
+          if string.sub(ngx.var.uri, 1, 5) == "/api/" then
+            return reject(401, "session ended")
+          end
+          return ngx.redirect("/logout")
+      end
+  when: digital_energy_twin_enabled
+
 - name: "Digital Energy Twin: Upsert APISIX upstream (admin)"
   uri:
     method: PUT
@@ -1025,6 +1252,9 @@
       upstream_id: "digital-energy-twin-admin-upstream"
       status: 1
       plugins:
+        response-rewrite:
+          headers:
+            set: "{{ digital_energy_twin_html_security_headers | combine({'Content-Security-Policy': digital_energy_twin_admin_csp}) }}"
         openid-connect:
           bearer_only: false
           unauth_action: auth
@@ -1041,76 +1271,13 @@
           realm: "{{ inv_access.tenant.realm_name }}"
           set_userinfo_header: true
           set_access_token_header: true
-          session:
-            secret: "{{ digital_energy_twin_oidc_session_secret | default(inv_access.apisix.api_credentials.admin_role) }}"
-            cookie:
-              name: "det_admin_session"
-              path: "/"
-              secure: true
-              http_only: true
-              samesite: "None"
+          session: "{{ digital_energy_twin_oidc_session | combine({'cookie_name': 'det_admin_session'} if digital_energy_twin_oidc_session_flat else {}) }}"
         serverless-post-function:
           _meta:
             disable: false
           phase: before_proxy
           functions:
-            - |-
-              return function()
-                  local core = require("apisix.core")
-                  local required_client = "{{ digital_energy_twin_oidc_client_id }}"
-                  local allowed_roles = {
-                    ["{{ digital_energy_twin_admin_required_role }}"] = true,
-                    ["{{ digital_energy_twin_manager_required_role }}"] = true,
-                    ["{{ digital_energy_twin_maintainer_required_role }}"] = true
-                  }
-                  local headers = ngx.req.get_headers()
-
-                  local token = headers["X-Access-Token"] or headers["x-access-token"]
-                  if type(token) == "table" then
-                    token = token[1]
-                  end
-
-                  local function has_any_required_role_from_jwt(jwt_token)
-                    if type(jwt_token) ~= "string" or jwt_token == "" then
-                      return false
-                    end
-                    local _, _, payload_b64 = string.find(jwt_token, "^[^.]+%.([^.]+)%.")
-                    if not payload_b64 then
-                      return false
-                    end
-                    payload_b64 = payload_b64:gsub("-", "+"):gsub("_", "/")
-                    local mod = #payload_b64 % 4
-                    if mod > 0 then
-                      payload_b64 = payload_b64 .. string.rep("=", 4 - mod)
-                    end
-                    local payload_json = ngx.decode_base64(payload_b64)
-                    if not payload_json then
-                      return false
-                    end
-                    local payload = core.json.decode(payload_json)
-                    if not payload then
-                      return false
-                    end
-                    local resource_access = payload["resource_access"] or {}
-                    local client_entry = resource_access[required_client] or {}
-                    local roles = client_entry["roles"] or {}
-                    for _, role in ipairs(roles) do
-                      if allowed_roles[role] then
-                        return true
-                      end
-                    end
-                    return false
-                  end
-
-                  if has_any_required_role_from_jwt(token) then
-                    return
-                  end
-
-                  ngx.status = 403
-                  ngx.header["Content-Type"] = "application/json"
-                  ngx.say('{"message":"forbidden: missing required role"}')
-                  return ngx.exit(403)
-              end
+            - "{{ digital_energy_twin_admin_gate_function }}"
     headers:
       Accept: application/json
       X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
@@ -1133,7 +1300,10 @@
       uri: "/*"
       upstream_id: "digital-energy-twin-public-upstream"
       status: 1
-      plugins: {}
+      plugins:
+        response-rewrite:
+          headers:
+            set: "{{ digital_energy_twin_html_security_headers | combine({'Content-Security-Policy': digital_energy_twin_public_csp}) }}"
     headers:
       Accept: application/json
       X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
@@ -1175,76 +1345,13 @@
           realm: "{{ inv_access.tenant.realm_name }}"
           set_access_token_header: true
           set_userinfo_header: false
-          session:
-            secret: "{{ digital_energy_twin_oidc_session_secret | default(inv_access.apisix.api_credentials.admin_role) }}"
-            cookie:
-              name: "det_admin_session"
-              path: "/"
-              secure: true
-              http_only: true
-              samesite: "None"
+          session: "{{ digital_energy_twin_oidc_session | combine({'cookie_name': 'det_admin_session'} if digital_energy_twin_oidc_session_flat else {}) }}"
         serverless-post-function:
           _meta:
             disable: false
           phase: before_proxy
           functions:
-            - |-
-              return function()
-                  local core = require("apisix.core")
-                  local required_client = "{{ digital_energy_twin_oidc_client_id }}"
-                  local allowed_roles = {
-                    ["{{ digital_energy_twin_admin_required_role }}"] = true,
-                    ["{{ digital_energy_twin_manager_required_role }}"] = true,
-                    ["{{ digital_energy_twin_maintainer_required_role }}"] = true
-                  }
-                  local headers = ngx.req.get_headers()
-
-                  local token = headers["X-Access-Token"] or headers["x-access-token"]
-                  if type(token) == "table" then
-                    token = token[1]
-                  end
-
-                  local function has_any_required_role_from_jwt(jwt_token)
-                    if type(jwt_token) ~= "string" or jwt_token == "" then
-                      return false
-                    end
-                    local _, _, payload_b64 = string.find(jwt_token, "^[^.]+%.([^.]+)%.")
-                    if not payload_b64 then
-                      return false
-                    end
-                    payload_b64 = payload_b64:gsub("-", "+"):gsub("_", "/")
-                    local mod = #payload_b64 % 4
-                    if mod > 0 then
-                      payload_b64 = payload_b64 .. string.rep("=", 4 - mod)
-                    end
-                    local payload_json = ngx.decode_base64(payload_b64)
-                    if not payload_json then
-                      return false
-                    end
-                    local payload = core.json.decode(payload_json)
-                    if not payload then
-                      return false
-                    end
-                    local resource_access = payload["resource_access"] or {}
-                    local client_entry = resource_access[required_client] or {}
-                    local roles = client_entry["roles"] or {}
-                    for _, role in ipairs(roles) do
-                      if allowed_roles[role] then
-                        return true
-                      end
-                    end
-                    return false
-                  end
-
-                  if has_any_required_role_from_jwt(token) then
-                    return
-                  end
-
-                  ngx.status = 403
-                  ngx.header["Content-Type"] = "application/json"
-                  ngx.say('{"message":"forbidden: missing required role"}')
-                  return ngx.exit(403)
-              end
+            - "{{ digital_energy_twin_admin_gate_function }}"
     headers:
       Accept: application/json
       X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
@@ -1428,76 +1535,13 @@
           realm: "{{ inv_access.tenant.realm_name }}"
           set_access_token_header: true
           set_userinfo_header: false
-          session:
-            secret: "{{ digital_energy_twin_oidc_session_secret | default(inv_access.apisix.api_credentials.admin_role) }}"
-            cookie:
-              name: "det_api_session"
-              path: "/"
-              secure: true
-              http_only: true
-              samesite: "None"
+          session: "{{ digital_energy_twin_oidc_session | combine({'cookie_name': 'det_api_session'} if digital_energy_twin_oidc_session_flat else {}) }}"
         serverless-post-function:
           _meta:
             disable: false
           phase: before_proxy
           functions:
-            - |-
-              return function()
-                  local core = require("apisix.core")
-                  local required_client = "{{ digital_energy_twin_oidc_client_id }}"
-                  local allowed_roles = {
-                    ["{{ digital_energy_twin_admin_required_role }}"] = true,
-                    ["{{ digital_energy_twin_manager_required_role }}"] = true,
-                    ["{{ digital_energy_twin_maintainer_required_role }}"] = true
-                  }
-                  local headers = ngx.req.get_headers()
-
-                  local token = headers["X-Access-Token"] or headers["x-access-token"]
-                  if type(token) == "table" then
-                    token = token[1]
-                  end
-
-                  local function has_any_required_role_from_jwt(jwt_token)
-                    if type(jwt_token) ~= "string" or jwt_token == "" then
-                      return false
-                    end
-                    local _, _, payload_b64 = string.find(jwt_token, "^[^.]+%.([^.]+)%.")
-                    if not payload_b64 then
-                      return false
-                    end
-                    payload_b64 = payload_b64:gsub("-", "+"):gsub("_", "/")
-                    local mod = #payload_b64 % 4
-                    if mod > 0 then
-                      payload_b64 = payload_b64 .. string.rep("=", 4 - mod)
-                    end
-                    local payload_json = ngx.decode_base64(payload_b64)
-                    if not payload_json then
-                      return false
-                    end
-                    local payload = core.json.decode(payload_json)
-                    if not payload then
-                      return false
-                    end
-                    local resource_access = payload["resource_access"] or {}
-                    local client_entry = resource_access[required_client] or {}
-                    local roles = client_entry["roles"] or {}
-                    for _, role in ipairs(roles) do
-                      if allowed_roles[role] then
-                        return true
-                      end
-                    end
-                    return false
-                  end
-
-                  if has_any_required_role_from_jwt(token) then
-                    return
-                  end
-
-                  ngx.status = 403
-                  ngx.header["Content-Type"] = "application/json"
-                  ngx.say('{"message":"forbidden: missing required role"}')
-                  return ngx.exit(403)
-              end
+            - "{{ digital_energy_twin_admin_gate_function }}"
     headers:
       Accept: application/json
       X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
