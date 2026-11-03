@@ -3,7 +3,7 @@
 # Without MATOMO_OIDC_* variables it behaves like the official image (password
 # login only). The image workflow passes both base images pinned by digest.
 ARG NODE_BASE_IMAGE=node:24.22.1-bookworm-slim
-ARG RUNTIME_BASE_IMAGE=matomo:5.14.0-apache
+ARG RUNTIME_BASE_IMAGE=matomo:5.14.2-apache
 
 # Writes the image SBOM, the release evidence every image carries.
 FROM ${NODE_BASE_IMAGE} AS sbom
@@ -16,6 +16,12 @@ COPY plugins/NoPasswordReset/plugin.json plugins/NoPasswordReset/plugin.json
 RUN node sbom.mjs SBOM.cdx.json
 
 FROM ${RUNTIME_BASE_IMAGE}
+# The official image is rebuilt only now and then, so Debian security fixes
+# published since are applied here. REFRESH_EPOCH is part of the build cache key:
+# raise it in the workflow to pick up new fixes.
+ARG REFRESH_EPOCH=0
+RUN echo "OS package refresh: ${REFRESH_EPOCH}" && apt-get update \
+  && apt-get upgrade -y --no-install-recommends && rm -rf /var/lib/apt/lists/*
 ADD --checksum=sha256:265433ec2cc526b627e3bb124c76c3521309d2a8becce06db95d89ce65a60bb2 \
   https://github.com/dominik-th/matomo-plugin-LoginOIDC/archive/refs/tags/5.0.0.tar.gz /tmp/loginoidc.tar.gz
 RUN mkdir -p /opt/matomo-plugins/LoginOIDC \

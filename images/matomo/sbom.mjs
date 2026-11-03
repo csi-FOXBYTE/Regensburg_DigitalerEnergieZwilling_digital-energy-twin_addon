@@ -47,6 +47,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   assert(output, 'Usage: node sbom.mjs output.json');
   const guardPlugin = JSON.parse(readFileSync(new URL('./plugins/NoPasswordReset/plugin.json', import.meta.url)));
   const bom = matomoBom({ build: process.env.BUILD_ID ?? 'local', source: process.env.SOURCE_COMMIT ?? 'local',
-    baseImage: process.env.RUNTIME_BASE_IMAGE ?? 'matomo:5.14.0-apache', noPasswordResetVersion: guardPlugin.version });
+    baseImage: process.env.RUNTIME_BASE_IMAGE ?? 'matomo:5.14.2-apache', noPasswordResetVersion: guardPlugin.version });
   writeFileSync(output, `${JSON.stringify(bom, null, 2)}\n`);
 }

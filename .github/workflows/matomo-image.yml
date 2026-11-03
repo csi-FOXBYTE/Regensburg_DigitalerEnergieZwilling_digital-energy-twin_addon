@@ -17,7 +17,9 @@ concurrency:
 env:
   IMAGE: ghcr.io/csi-foxbyte/regensburg-web-matomo
   NODE_BASE: node:24.22.1-bookworm-slim
-  MATOMO_BASE: matomo:5.14.0-apache
+  MATOMO_BASE: matomo:5.14.2-apache
+  # Raise to apply Debian security fixes published after the last build.
+  REFRESH_EPOCH: "1"
   PLATFORM: linux/amd64
 
 jobs:
@@ -64,13 +66,14 @@ jobs:
           build-args: |
             NODE_BASE_IMAGE=${{ steps.bases.outputs.node }}
             RUNTIME_BASE_IMAGE=${{ steps.bases.outputs.matomo }}
+            REFRESH_EPOCH=${{ env.REFRESH_EPOCH }}
             BUILD_ID=${{ steps.bases.outputs.build }}
             SOURCE_COMMIT=${{ github.sha }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-          cache-from: type=gha,scope=matomo
-          cache-to: type=gha,mode=max,scope=matomo
+          cache-from: type=gha,scope=matomo-${{ env.REFRESH_EPOCH }}
+          cache-to: type=gha,mode=max,scope=matomo-${{ env.REFRESH_EPOCH }}
 
       - name: Pin the image and its SBOM
         shell: bash

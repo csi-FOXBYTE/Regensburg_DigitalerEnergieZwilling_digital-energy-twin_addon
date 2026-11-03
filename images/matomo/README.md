@@ -1,6 +1,6 @@
 # Matomo image
 
-The official `matomo:5.14.0-apache` image plus the
+The official `matomo:5.14.2-apache` image plus the
 [LoginOIDC](https://github.com/dominik-th/matomo-plugin-LoginOIDC) plugin
 (5.0.0), so Matomo users log in via the platform Keycloak, and the small
 [NoPasswordReset](plugins/NoPasswordReset/NoPasswordReset.php) plugin. On every
