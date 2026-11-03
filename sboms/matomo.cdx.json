@@ -6,8 +6,8 @@
     "component": {
       "type": "application",
       "name": "regensburg-web-matomo",
-      "version": "build-41605139620-1",
-      "bom-ref": "regensburg:matomo:build-41605139620-1",
+      "version": "build-41606428409-1",
+      "bom-ref": "regensburg:matomo:build-41606428409-1",
       "licenses": [
         {
           "expression": "GPL-3.0-or-later"
@@ -16,11 +16,11 @@
       "properties": [
         {
           "name": "vcs:commit",
-          "value": "c8ca9661b381068686cdac3c8912f784859b3703"
+          "value": "eb15ab3817609445bb64ca2332d2b6bc39d328f2"
         },
         {
           "name": "regensburg:build",
-          "value": "41605139620-1"
+          "value": "41606428409-1"
         },
         {
           "name": "sbom:source-state",
@@ -28,11 +28,11 @@
         }
       ]
     },
-    "timestamp": "2026-11-03T07:37:04Z",
+    "timestamp": "2026-11-03T08:51:23Z",
     "properties": [
       {
         "name": "regensburg:release-source",
-        "value": "c8ca9661b381068686cdac3c8912f784859b3703"
+        "value": "eb15ab3817609445bb64ca2332d2b6bc39d328f2"
       },
       {
         "name": "regensburg:release-inventory",
@@ -40,7 +40,7 @@
       },
       {
         "name": "regensburg:image-digest",
-        "value": "sha256:635305c9a5ab34a5bfe11ee26f96bac58000b7ddb2ac0abde6b92bbf778aef39"
+        "value": "sha256:76386324c2532baa5e9c4767379d6a4ccad8494b808c050bb34723c1d16afb10"
       }
     ]
   },
@@ -48,8 +48,8 @@
     {
       "type": "container",
       "name": "matomo",
-      "version": "5.14.0-apache",
-      "bom-ref": "docker:matomo:5.14.0-apache",
+      "version": "5.14.2-apache",
+      "bom-ref": "docker:matomo:5.14.2-apache",
       "licenses": [
         {
           "expression": "GPL-3.0-or-later"
@@ -58,7 +58,7 @@
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "40680f8e7ab659c55659dd69e069e261825ef1d4a0bfd881b52714536c935b6e"
+          "content": "480fd87e3a1f1f8987f54ee6e68547560e2743f6269bbddfbf6e26996c51f3db"
         }
       ]
     },
@@ -100,13 +100,13 @@
   ],
   "dependencies": [
     {
-      "ref": "regensburg:matomo:build-41605139620-1",
+      "ref": "regensburg:matomo:build-41606428409-1",
       "dependsOn": [
-        "docker:matomo:5.14.0-apache",
+        "docker:matomo:5.14.2-apache",
         "pkg:github/dominik-th/matomo-plugin-LoginOIDC@5.0.0",
         "regensburg:matomo-plugin:NoPasswordReset@1.1.0"
       ]
     }
   ],
-  "serialNumber": "urn:uuid:2b7ccebb-7b12-58b8-8723-2d521e192750"
+  "serialNumber": "urn:uuid:d60e53cd-7219-5ba9-84c4-527755c5a792"
 }
