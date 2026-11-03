@@ -1,17 +1,17 @@
 {
   "digital_energy_twin_matomo_release": {
     "image": "ghcr.io/csi-foxbyte/regensburg-web-matomo",
-    "digest": "sha256:2f36c6802894835439bdcbf36b9a46beaa8ec90e23f4ac8c30d8e3f2946a6474",
-    "build": "40885758884-1",
-    "sourceCommit": "f0671e4f33653bf8533740272f97c1e7f16f7795",
-    "releaseSource": "f0671e4f33653bf8533740272f97c1e7f16f7795",
+    "digest": "sha256:635305c9a5ab34a5bfe11ee26f96bac58000b7ddb2ac0abde6b92bbf778aef39",
+    "build": "41605139620-1",
+    "sourceCommit": "c8ca9661b381068686cdac3c8912f784859b3703",
+    "releaseSource": "c8ca9661b381068686cdac3c8912f784859b3703",
     "releaseRepository": "csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon",
     "platform": "linux/amd64",
     "baseImage": "node:24.22.1-bookworm-slim@sha256:be8204d4bd327363357f532187b752ff62759c31bedf98e9e18fc08c9cbd605c",
     "runtimeBaseImage": "matomo:5.14.0-apache@sha256:40680f8e7ab659c55659dd69e069e261825ef1d4a0bfd881b52714536c935b6e",
     "sbom": {
       "path": "sboms/matomo.cdx.json",
-      "sha256": "sha256:ecce236d924723d5090dd17a371369323417be3bd7744b74ec934d1c3434b390"
+      "sha256": "sha256:d0f9e9e6e83895e3fd49e05c9264a27f422e53ed2362dcf426f7f17567927f3a"
     }
   }
 }
