@@ -286,6 +286,14 @@
             Strict-Transport-Security: "max-age=31536000; includeSubDomains"
             Content-Security-Policy: "default-src 'self'; frame-ancestors 'none'; base-uri 'self'"
 
+# The admin frontend calls its API same-origin. No other origin may send the
+# admin session along, the public frontend (same site) in particular.
+- name: "Digital Energy Twin: Set CORS for the admin API"
+  ansible.builtin.set_fact:
+    digital_energy_twin_backend_admin_cors: >-
+      {{ digital_energy_twin_backend_common_plugins.cors
+      | combine({'allow_origins': 'https://' ~ digital_energy_twin_admin_direct_host}) }}
+
 - name: "Digital Energy Twin: Load Matomo config"
   ansible.builtin.set_fact:
     digital_energy_twin_matomo_config: "{{ digital_energy_twin.matomo | default({}) }}"
@@ -1352,7 +1360,7 @@
       upstream_id: "digital-energy-twin-backend-upstream"
       status: 1
       plugins:
-        cors: "{{ digital_energy_twin_backend_common_plugins.cors }}"
+        cors: "{{ digital_energy_twin_backend_admin_cors }}"
         limit-count: "{{ digital_energy_twin_backend_common_plugins['limit-count'] }}"
         response-rewrite: "{{ digital_energy_twin_backend_common_plugins['response-rewrite'] }}"
         openid-connect:
@@ -1543,7 +1551,7 @@
       upstream_id: "digital-energy-twin-backend-upstream"
       status: 1
       plugins:
-        cors: "{{ digital_energy_twin_backend_common_plugins.cors }}"
+        cors: "{{ digital_energy_twin_backend_admin_cors }}"
         limit-count: "{{ digital_energy_twin_backend_common_plugins['limit-count'] }}"
         response-rewrite: "{{ digital_energy_twin_backend_common_plugins['response-rewrite'] }}"
         openid-connect:

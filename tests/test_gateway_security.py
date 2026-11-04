@@ -159,6 +159,34 @@ class GatewaySecurityTests(unittest.TestCase):
         self.assertFalse(ENV.compile_expression(check)(digital_energy_twin={"oidc_ssl_verify": "false"}))
         self.assertNotIn("ssl_verify = false", gate)
 
+    def test_admin_api_allows_cors_only_for_the_admin_origin(self):
+        defaults = task("Set defaults")["set_fact"]
+        config = {
+            "public_host": "det.example.test",
+            "admin_host": "admin.det.example.test",
+            "backend_cors_additional_origins": ["https://partner.example.test"],
+        }
+        common = dict(defaults["digital_energy_twin_backend_common_plugins"]["cors"])
+        common["allow_origins"] = render(common["allow_origins"], digital_energy_twin=config)
+        self.assertEqual(
+            common["allow_origins"].split(","),
+            ["https://det.example.test", "https://admin.det.example.test", "https://partner.example.test"],
+        )
+        expression = task("Set CORS for the admin API")["ansible.builtin.set_fact"]["digital_energy_twin_backend_admin_cors"]
+        admin = ENV.compile_expression(expression.strip()[2:-2])(
+            digital_energy_twin_backend_common_plugins={"cors": common},
+            digital_energy_twin_admin_direct_host="admin.det.example.test",
+        )
+        self.assertEqual(admin["allow_origins"], "https://admin.det.example.test")
+        self.assertEqual({k: v for k, v in admin.items() if k != "allow_origins"},
+                         {k: v for k, v in common.items() if k != "allow_origins"})
+        for route in ("Upsert admin-host API route (OIDC protected)", "Upsert backend admin-api route (OIDC protected)"):
+            with self.subTest(route=route):
+                self.assertEqual(route_plugins(route)["cors"], "{{ digital_energy_twin_backend_admin_cors }}")
+        for route in ("Upsert public-host API route (open)", "Upsert backend api route (open)"):
+            with self.subTest(route=route):
+                self.assertEqual(route_plugins(route), "{{ digital_energy_twin_backend_common_plugins }}")
+
 
 if __name__ == "__main__":
     unittest.main()

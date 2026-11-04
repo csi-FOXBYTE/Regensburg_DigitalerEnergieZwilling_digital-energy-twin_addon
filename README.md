@@ -981,6 +981,11 @@ CORS defaults to:
 
 You can extend allowed origins with `backend_cors_additional_origins`.
 
+The admin API routes (`/api/*` on `admin_host`, `/api/admin/*` on
+`backend_host`) allow only `https://{{ admin_host }}`, without the public host
+and without `backend_cors_additional_origins`: the admin frontend calls its API
+same-origin, and no other site may send the admin session along.
+
 ### Frontend security headers
 
 The HTML routes of both frontends (`public_host` and `admin_host`) send
