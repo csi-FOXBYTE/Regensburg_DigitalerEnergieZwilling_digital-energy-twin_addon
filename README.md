@@ -1021,6 +1021,18 @@ access token expires. Pages then log the user out, API calls get `401`.
   runs with a read-only root filesystem. MariaDB and the backup job run as non-root (UID 999).
 - Images must support non-root execution.
 
+## Tests
+
+The offline unit tests need Python 3 with Jinja2 and PyYAML, and Node.js for
+the Matomo SBOM checks:
+
+```bash
+python3 -m unittest discover -s tests
+```
+
+The **CI** workflow runs them and [actionlint](https://github.com/rhysd/actionlint)
+on every pull request and on `main`, with read-only repository access.
+
 ## Deploy script
 
 `scripts/deploy.sh` is a helper that SSHes into your Ansible host, pulls the latest repo state, and runs the playbook.
