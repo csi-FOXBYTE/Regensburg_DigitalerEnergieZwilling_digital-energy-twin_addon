@@ -246,6 +246,7 @@
     digital_energy_twin_database_secret_name: "digital-energy-twin-database"
     digital_energy_twin_smtp_secret_name: "digital-energy-twin-smtp"
     digital_energy_twin_oidc_session_secret_name: "digital-energy-twin-oidc-session"
+    digital_energy_twin_altcha_secret_name: "digital-energy-twin-altcha"
     digital_energy_twin_session_check_ttl: "{{ digital_energy_twin.session_check_ttl | default(5) | int }}"
     digital_energy_twin_feedback_mail_to: "{{ digital_energy_twin.feedback_mail_to | default('') | trim }}"
     digital_energy_twin_submission_deletion_token_ttl_days: "{{ digital_energy_twin.submission_deletion_token_ttl_days | default(30) | int }}"
@@ -264,7 +265,8 @@
       cors:
         allow_origins: "{{ ((['https://' ~ digital_energy_twin.public_host, 'https://' ~ digital_energy_twin.admin_host] + digital_energy_twin.backend_cors_additional_origins) | unique) | join(',') }}"
         allow_methods: "GET,POST,PUT,PATCH,DELETE,OPTIONS"
-        allow_headers: "Accept,Authorization,Content-Type,Origin,Referer,User-Agent,X-Access-Token,X-Requested-With"
+        # X-Altcha carries the Altcha solution of the public writes.
+        allow_headers: "Accept,Authorization,Content-Type,Origin,Referer,User-Agent,X-Access-Token,X-Requested-With,X-Altcha"
         expose_headers: "Content-Length,Content-Type,Date,Server"
         max_age: 3600
         allow_credential: true
@@ -634,6 +636,37 @@
       stringData:
         SMTP_URL: "{{ digital_energy_twin_smtp_url }}"
   when: digital_energy_twin_enabled and digital_energy_twin_feedback_mail_to | length > 0
+  no_log: true
+
+- name: "Digital Energy Twin: Get Altcha HMAC key secret"
+  kubernetes.core.k8s_info:
+    kind: Secret
+    namespace: "{{ k8s_namespace }}"
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    name: "{{ digital_energy_twin_altcha_secret_name }}"
+  register: digital_energy_twin_altcha_secret_info
+  when: digital_energy_twin_enabled
+  no_log: true
+
+# The backend signs the Altcha challenges of the public writes with this key
+# and refuses to start without it. Generated once and kept, so a redeploy does
+# not invalidate challenges in flight; delete the Secret to rotate the key.
+- name: "Digital Energy Twin: Create Altcha HMAC key secret once"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: "{{ digital_energy_twin_altcha_secret_name }}"
+      type: Opaque
+      stringData:
+        ALTCHA_HMAC_KEY: "{{ lookup('ansible.builtin.password', '/dev/null', length=64, chars=['ascii_letters', 'digits']) }}"
+  when: digital_energy_twin_enabled and digital_energy_twin_altcha_secret_info.resources | length == 0
   no_log: true
 
 - name: "Digital Energy Twin: Ensure placeholder content configmap"

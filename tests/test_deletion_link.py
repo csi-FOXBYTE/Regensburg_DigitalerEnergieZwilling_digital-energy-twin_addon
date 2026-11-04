@@ -33,7 +33,8 @@ def render_backend(ttl):
     template = ENV.from_string((ROOT / "templates/digital_energy_twin_backend_deploy.yaml.j2").read_text())
     deployment = yaml.safe_load(template.render({
         "digital_energy_twin_backend_image": "backend@sha256:" + "b" * 64,
-        "digital_energy_twin_database_secret_name": "db", "digital_energy_twin_backend_port": 5000,
+        "digital_energy_twin_database_secret_name": "db", "digital_energy_twin_altcha_secret_name": "altcha",
+        "digital_energy_twin_backend_port": 5000,
         "digital_energy_twin_feedback_mail_to": "", "digital_energy_twin_tiles_url": "t",
         "digital_energy_twin_terrain_url": "t", "digital_energy_twin_address_database_url": "a",
         "digital_energy_twin_backend_direct_host": "api", "digital_energy_twin_public_direct_host": "det",

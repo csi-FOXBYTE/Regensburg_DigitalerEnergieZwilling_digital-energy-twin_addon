@@ -230,6 +230,22 @@ from Civitas Core `inv_email`. With `starttls: true`, it creates an
 start. Both modes require TLS. The SMTP URL is stored in a Kubernetes
 Secret and supplied only to the backend container.
 
+## Altcha for public writes
+
+The backend accepts a public data donation (`POST /api/public/submissions`) or
+feedback (`POST /api/public/feedback`) only with a solved, unused Altcha
+proof-of-work challenge in the `X-Altcha` header; it issues the challenges
+itself at `GET /api/public/altcha/challenge`. The addon generates the HMAC key
+for these challenges once (64 random letters and digits) and keeps it in the
+Secret `digital-energy-twin-altcha`, which the backend reads as
+`ALTCHA_HMAC_KEY`. Without it the backend does not start. To rotate the key,
+delete the Secret, run the addon again and restart the backend deployment;
+challenges in flight then fail once.
+The backend remembers used challenges in memory, which is sufficient for its
+single replica. The gateway's CORS settings allow the `X-Altcha` header. The
+public CSP needs no change: the widget and its worker are served by the
+public frontend itself.
+
 ## Database
 
 The addon supports three modes. The examples below show only database-related
