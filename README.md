@@ -1007,6 +1007,27 @@ The admin API routes (`/api/*` on `admin_host`, `/api/admin/*` on
 and without `backend_cors_additional_origins`: the admin frontend calls its API
 same-origin, and no other site may send the admin session along.
 
+### Request body size limit
+
+The API routes (`/api/*` on `public_host` and `admin_host`, `/api/*` and
+`/api/admin/*` on `backend_host`) also carry APISIX's `client-control` plugin
+with `max_body_size` set to `api_max_body_size` bytes. APISIX answers larger
+request bodies itself with `413 Request Entity Too Large`; this covers bodies
+announced with `Content-Length` and chunked ones. The backend (Fastify's default
+`bodyLimit`) accepts at most 1 MiB and would otherwise close the connection
+early, which APISIX reports as `502`.
+
+Default `1048576` (1 MiB, the backend's limit). It must be a whole number of
+bytes from `1` to `1048576`, otherwise the playbook stops before deploying: a
+larger value would let oversized bodies reach the backend again. `client-control`
+is part of APISIX's default plugin list; if the platform's APISIX
+configuration replaces that list, it must include `client-control`, or the
+route updates fail.
+
+```yaml
+api_max_body_size: 1048576
+```
+
 ### Frontend security headers
 
 The HTML routes of both frontends (`public_host` and `admin_host`) send

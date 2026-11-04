@@ -46,6 +46,9 @@ all:
             # Days after submission until the deletion link stops serving the
             # data download (1 to 9999). Deleting stays possible.
             submission_deletion_token_ttl_days: 30
+            # Largest request body in bytes that APISIX passes to the backend API
+            # (1 to 1048576, the backend's own limit); larger ones get 413.
+            api_max_body_size: 1048576
             # Optional. Configures the backend mail transport when supplied.
             # feedback_mail_to: "feedback@{{ DOMAIN }}"
             # Mode 1 (default): omit db to create digital_energy_twin and its

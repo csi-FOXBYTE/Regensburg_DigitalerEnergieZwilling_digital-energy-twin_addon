@@ -185,7 +185,7 @@ class GatewaySecurityTests(unittest.TestCase):
                 self.assertEqual(route_plugins(route)["cors"], "{{ digital_energy_twin_backend_admin_cors }}")
         for route in ("Upsert public-host API route (open)", "Upsert backend api route (open)"):
             with self.subTest(route=route):
-                self.assertEqual(route_plugins(route), "{{ digital_energy_twin_backend_common_plugins }}")
+                self.assertEqual(route_plugins(route), "{{ digital_energy_twin_backend_api_plugins }}")
 
     def test_public_host_admin_block_sends_the_api_security_headers(self):
         plugins = route_plugins("Upsert public-host admin-api block route")

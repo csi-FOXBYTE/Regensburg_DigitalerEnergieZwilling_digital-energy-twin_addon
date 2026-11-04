@@ -215,6 +215,21 @@
       a whole number of days from 1 to 9999 (default 30).
   when: digital_energy_twin.submission_deletion_token_ttl_days is defined
 
+# The backend (Fastify default bodyLimit) refuses bodies over 1 MiB by closing
+# the connection, which APISIX reports as 502. The gateway answers them with 413
+# itself; a larger gateway limit would let them through to the backend again.
+- name: "Digital Energy Twin: Validate the API body size limit"
+  ansible.builtin.assert:
+    that:
+      - >-
+        digital_energy_twin.api_max_body_size is not boolean
+        and (digital_energy_twin.api_max_body_size | string) is match('^[1-9][0-9]{0,6}$')
+        and digital_energy_twin.api_max_body_size | int <= 1048576
+    fail_msg: >-
+      inv_addons['digital-energy-twin'].api_max_body_size must be a whole number of
+      bytes from 1 to 1048576 (default 1048576, the backend's own limit).
+  when: digital_energy_twin.api_max_body_size is defined
+
 # The Matomo image is built and pinned by this addon (images/matomo,
 # vars/matomo_image.json), not by the app release.
 - name: "Digital Energy Twin: Validate the pinned Matomo image"
@@ -250,6 +265,7 @@
     digital_energy_twin_session_check_ttl: "{{ digital_energy_twin.session_check_ttl | default(5) | int }}"
     digital_energy_twin_feedback_mail_to: "{{ digital_energy_twin.feedback_mail_to | default('') | trim }}"
     digital_energy_twin_submission_deletion_token_ttl_days: "{{ digital_energy_twin.submission_deletion_token_ttl_days | default(30) | int }}"
+    digital_energy_twin_api_max_body_size: "{{ digital_energy_twin.api_max_body_size | default(1048576) | int }}"
     digital_energy_twin_backend_port: "{{ digital_energy_twin.backend_port | default(5000) | int }}"
     digital_energy_twin_admin_port: "{{ digital_energy_twin.admin_port | default(8080) | int }}"
     digital_energy_twin_public_port: "{{ digital_energy_twin.public_port | default(8080) | int }}"
@@ -295,6 +311,16 @@
     digital_energy_twin_backend_admin_cors: >-
       {{ digital_energy_twin_backend_common_plugins.cors
       | combine({'allow_origins': 'https://' ~ digital_energy_twin_admin_direct_host}) }}
+
+# APISIX answers bodies over the limit with 413 before they reach the backend
+# (client-control checks Content-Length and caps chunked bodies). Built as one
+# expression so max_body_size stays an integer in the route JSON.
+- name: "Digital Energy Twin: Set the body size limit for the API routes"
+  ansible.builtin.set_fact:
+    digital_energy_twin_backend_client_control: "{{ {'max_body_size': digital_energy_twin_api_max_body_size | int} }}"
+    digital_energy_twin_backend_api_plugins: >-
+      {{ digital_energy_twin_backend_common_plugins
+      | combine({'client-control': {'max_body_size': digital_energy_twin_api_max_body_size | int}}) }}
 
 - name: "Digital Energy Twin: Load Matomo config"
   ansible.builtin.set_fact:
@@ -1394,6 +1420,7 @@
       status: 1
       plugins:
         cors: "{{ digital_energy_twin_backend_admin_cors }}"
+        client-control: "{{ digital_energy_twin_backend_client_control }}"
         limit-count: "{{ digital_energy_twin_backend_common_plugins['limit-count'] }}"
         response-rewrite: "{{ digital_energy_twin_backend_common_plugins['response-rewrite'] }}"
         openid-connect:
@@ -1478,7 +1505,7 @@
       priority: 100
       upstream_id: "digital-energy-twin-backend-upstream"
       status: 1
-      plugins: "{{ digital_energy_twin_backend_common_plugins }}"
+      plugins: "{{ digital_energy_twin_backend_api_plugins }}"
     headers:
       Accept: application/json
       X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
@@ -1514,7 +1541,7 @@
       uri: "/api/*"
       upstream_id: "digital-energy-twin-backend-upstream"
       status: 1
-      plugins: "{{ digital_energy_twin_backend_common_plugins }}"
+      plugins: "{{ digital_energy_twin_backend_api_plugins }}"
     headers:
       Accept: application/json
       X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
@@ -1586,6 +1613,7 @@
       status: 1
       plugins:
         cors: "{{ digital_energy_twin_backend_admin_cors }}"
+        client-control: "{{ digital_energy_twin_backend_client_control }}"
         limit-count: "{{ digital_energy_twin_backend_common_plugins['limit-count'] }}"
         response-rewrite: "{{ digital_energy_twin_backend_common_plugins['response-rewrite'] }}"
         openid-connect:
