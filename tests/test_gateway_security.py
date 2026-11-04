@@ -187,6 +187,14 @@ class GatewaySecurityTests(unittest.TestCase):
             with self.subTest(route=route):
                 self.assertEqual(route_plugins(route), "{{ digital_energy_twin_backend_common_plugins }}")
 
+    def test_public_host_admin_block_sends_the_api_security_headers(self):
+        plugins = route_plugins("Upsert public-host admin-api block route")
+        self.assertEqual(plugins["response-rewrite"], "{{ digital_energy_twin_backend_common_plugins['response-rewrite'] }}")
+        self.assertIn("ngx.exit(403)", plugins["serverless-pre-function"]["functions"][0])
+        headers = task("Set defaults")["set_fact"]["digital_energy_twin_backend_common_plugins"]["response-rewrite"]["headers"]["set"]
+        for name in ("Strict-Transport-Security", "X-Content-Type-Options", "X-Frame-Options", "Content-Security-Policy"):
+            self.assertIn(name, headers)
+
 
 if __name__ == "__main__":
     unittest.main()

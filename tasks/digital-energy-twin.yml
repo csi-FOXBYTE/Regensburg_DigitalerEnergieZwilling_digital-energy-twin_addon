@@ -1409,6 +1409,7 @@
       upstream_id: "digital-energy-twin-backend-upstream"
       status: 1
       plugins:
+        response-rewrite: "{{ digital_energy_twin_backend_common_plugins['response-rewrite'] }}"
         serverless-pre-function:
           _meta:
             disable: false
@@ -2687,7 +2688,7 @@
       uri: "/*"
       upstream_id: "digital-energy-twin-matomo-upstream"
       status: 1
-      plugins: "{{ {} if digital_energy_twin_matomo_installed else digital_energy_twin_matomo_install_lock }}"
+      plugins: "{{ digital_energy_twin_matomo_headers if digital_energy_twin_matomo_installed else digital_energy_twin_matomo_install_lock }}"
     headers:
       Accept: application/json
       X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
@@ -2695,6 +2696,15 @@
       - 200
       - 201
   vars:
+    # Matomo embeds its widgets and opt-out in other sites and sets its own
+    # frame rules, so no CSP or X-Frame-Options here.
+    digital_energy_twin_matomo_headers:
+      response-rewrite:
+        headers:
+          set:
+            Strict-Transport-Security: "max-age=31536000; includeSubDomains"
+            X-Content-Type-Options: "nosniff"
+            Referrer-Policy: "same-origin"
     digital_energy_twin_matomo_install_lock:
       serverless-pre-function:
         _meta:

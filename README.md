@@ -961,7 +961,9 @@ the APISIX namespace; older addon versions also used the addon namespace.
 
 - `/*` -> Matomo. Until Matomo is installed, only a browser that opened the
   one-time install link gets through; everyone else gets `403`. Afterwards it is
-  open, and Matomo and Keycloak handle the login.
+  open, and Matomo and Keycloak handle the login. The gateway then adds HSTS,
+  `X-Content-Type-Options: nosniff` and `Referrer-Policy: same-origin`; frame
+  rules stay with Matomo, whose widgets and opt-out are embedded in other sites.
 
 Application permissions and role assignment are described in
 [Admin frontend access](#admin-frontend-access).
@@ -973,6 +975,9 @@ Applied on backend routes:
 - `cors`
 - `limit-count`
 - `response-rewrite` (security headers)
+
+The `403` route for `/api/admin/*` on `public_host` sends the same security
+headers.
 
 CORS defaults to:
 
