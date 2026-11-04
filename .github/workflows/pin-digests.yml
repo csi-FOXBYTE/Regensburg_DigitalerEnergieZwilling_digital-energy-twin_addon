@@ -12,8 +12,8 @@ on:
         required: true
         default: false
         type: boolean
-permissions:
-  contents: write
+# Nothing by default; the job below gets only what it needs.
+permissions: {}
 
 concurrency:
   group: addon-release-main
@@ -22,9 +22,13 @@ concurrency:
 jobs:
   release-addon:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # commits the release to main, pushes its tag and creates the GitHub release
     steps:
+      # Keeps the checkout credentials: the commit step pushes the release
+      # commit and tag with them.
       - name: Checkout addon
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: main
           fetch-depth: 0
@@ -41,7 +45,7 @@ jobs:
           fi
 
       - name: Checkout the selected monorepo tag
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_MonoRepo
           ref: ${{ inputs.application_release_tag }}
@@ -49,7 +53,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .local/application-source/.node-version
 
