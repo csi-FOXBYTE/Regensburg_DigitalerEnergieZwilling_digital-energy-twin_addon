@@ -14,6 +14,8 @@ all:
             ns_name: "{{ ENVIRONMENT }}-digitalenergytwin"
             ns_kubeconfig: "{{ kubeconfig_file | default('kubeconfig') }}"
             oidc_client_id: "digital-energy-twin"
+            # APISIX verifies the Keycloak certificate; it must trust its CA. false is an explicit opt-out.
+            oidc_ssl_verify: true
             # gateway: use inv_k8s.gateway_class; ingress: use inv_k8s.ingress_class.
             # Select ingress for an existing ingress-nginx deployment without Gateway API.
             routing_mode: gateway

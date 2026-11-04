@@ -28,6 +28,13 @@
       (a list), tiles_url, terrain_url, address_database_url. The backend refuses
       a non-HTTPS KEYCLOAK_JWKS_URI, so inv_access.platform.hostname must be https://.
 
+- name: "Digital Energy Twin: Validate the gateway TLS setting"
+  ansible.builtin.assert:
+    that:
+      - digital_energy_twin.oidc_ssl_verify | default(true) is boolean
+    fail_msg: >-
+      digital-energy-twin.oidc_ssl_verify must be true or false, without quotes.
+
 - name: "Digital Energy Twin: Select routing mode"
   ansible.builtin.set_fact:
     digital_energy_twin_routing_mode: "{{ digital_energy_twin.routing_mode | default('gateway') }}"
@@ -225,6 +232,8 @@
     digital_energy_twin_namespace: "{{ digital_energy_twin.ns_name }}"
     digital_energy_twin_oidc_callback_path: "/oidc/callback"
     digital_energy_twin_oidc_client_id: "{{ digital_energy_twin.oidc_client_id }}"
+    # APISIX verifies Keycloak's certificate (discovery, JWKS, introspection).
+    digital_energy_twin_oidc_ssl_verify: "{{ digital_energy_twin.oidc_ssl_verify | default(true) | bool }}"
     digital_energy_twin_admin_direct_host: "{{ digital_energy_twin.admin_host }}"
     digital_energy_twin_public_direct_host: "{{ digital_energy_twin.public_host }}"
     digital_energy_twin_backend_direct_host: "{{ digital_energy_twin.backend_host }}"
@@ -1082,7 +1091,8 @@
 # Keycloak whether the access token's session is still active: the gateway keeps
 # the session in the cookie and would otherwise accept a logged-out cookie until
 # the access token expires. Results are cached per worker for a few seconds.
-# TLS to Keycloak is not verified, like the openid-connect plugin's default.
+# Like the openid-connect plugin, it verifies Keycloak's certificate unless
+# oidc_ssl_verify is false; APISIX must trust the CA that issued it.
 - name: "Digital Energy Twin: Set the admin gate for protected routes"
   ansible.builtin.set_fact:
     digital_energy_twin_admin_gate_function: |-
@@ -1147,7 +1157,7 @@
             client_secret = client_secret
           }),
           headers = { ["Content-Type"] = "application/x-www-form-urlencoded" },
-          ssl_verify = false
+          ssl_verify = {{ 'true' if digital_energy_twin_oidc_ssl_verify | bool else 'false' }}
         })
         if not res or res.status ~= 200 then
           core.log.error("token introspection failed: ", err or res.status)
@@ -1281,6 +1291,7 @@
           discovery: "{{ inv_access.platform.hostname }}/realms/{{ inv_access.tenant.realm_name }}/.well-known/openid-configuration"
           introspection_endpoint: "{{ inv_access.platform.hostname }}/realms/{{ inv_access.tenant.realm_name }}/protocol/openid-connect/token/introspect"
           introspection_endpoint_auth_method: post
+          ssl_verify: "{{ digital_energy_twin_oidc_ssl_verify | bool }}"
           realm: "{{ inv_access.tenant.realm_name }}"
           set_userinfo_header: true
           set_access_token_header: true
@@ -1355,6 +1366,7 @@
           discovery: "{{ inv_access.platform.hostname }}/realms/{{ inv_access.tenant.realm_name }}/.well-known/openid-configuration"
           introspection_endpoint: "{{ inv_access.platform.hostname }}/realms/{{ inv_access.tenant.realm_name }}/protocol/openid-connect/token/introspect"
           introspection_endpoint_auth_method: post
+          ssl_verify: "{{ digital_energy_twin_oidc_ssl_verify | bool }}"
           realm: "{{ inv_access.tenant.realm_name }}"
           set_access_token_header: true
           set_userinfo_header: false
@@ -1545,6 +1557,7 @@
           discovery: "{{ inv_access.platform.hostname }}/realms/{{ inv_access.tenant.realm_name }}/.well-known/openid-configuration"
           introspection_endpoint: "{{ inv_access.platform.hostname }}/realms/{{ inv_access.tenant.realm_name }}/protocol/openid-connect/token/introspect"
           introspection_endpoint_auth_method: post
+          ssl_verify: "{{ digital_energy_twin_oidc_ssl_verify | bool }}"
           realm: "{{ inv_access.tenant.realm_name }}"
           set_access_token_header: true
           set_userinfo_header: false

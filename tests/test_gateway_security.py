@@ -17,6 +17,7 @@ ENV.filters["urlsplit"] = lambda value, part: getattr(urlsplit(value), part)
 ENV.filters["unique"] = lambda values: list(dict.fromkeys(values))
 ENV.filters["combine"] = lambda *dicts: {key: value for d in dicts for key, value in d.items()}
 ENV.filters["b64decode"] = lambda value: base64.b64decode(value).decode()
+ENV.filters["bool"] = lambda value: value if isinstance(value, bool) else str(value).strip().lower() in ("yes", "on", "1", "true")
 
 PROTECTED_ROUTES = (
     "Upsert protected admin direct-host route",
@@ -136,6 +137,27 @@ class GatewaySecurityTests(unittest.TestCase):
         self.assertLess(body.index("has_any_required_role_from_jwt(token)"), body.index("session_states(token"))
         self.assertIn('reject(401, "session ended")', body)
         self.assertIn('ngx.redirect("/logout")', body)
+
+
+    def test_tls_to_keycloak_is_verified_unless_explicitly_switched_off(self):
+        check = task("Validate the gateway TLS setting")["ansible.builtin.assert"]["that"][0]
+        setting = task("Set defaults")["set_fact"]["digital_energy_twin_oidc_ssl_verify"]
+        gate = task("Set the admin gate for protected routes")["ansible.builtin.set_fact"]["digital_energy_twin_admin_gate_function"]
+        gate_line = next(line for line in gate.splitlines() if "ssl_verify" in line)
+        for config, expected in (({}, True), ({"oidc_ssl_verify": True}, True), ({"oidc_ssl_verify": False}, False)):
+            with self.subTest(config=config):
+                self.assertTrue(ENV.compile_expression(check)(digital_energy_twin=config))
+                verify = render(setting, digital_energy_twin=config) == "True"
+                self.assertEqual(verify, expected)
+                for route in PROTECTED_ROUTES:
+                    plugin = route_plugins(route)["openid-connect"]
+                    self.assertEqual(render(plugin["ssl_verify"], digital_energy_twin_oidc_ssl_verify=verify), str(expected))
+                self.assertEqual(
+                    render(gate_line, digital_energy_twin_oidc_ssl_verify=verify).strip(),
+                    "ssl_verify = " + str(expected).lower(),
+                )
+        self.assertFalse(ENV.compile_expression(check)(digital_energy_twin={"oidc_ssl_verify": "false"}))
+        self.assertNotIn("ssl_verify = false", gate)
 
 
 if __name__ == "__main__":

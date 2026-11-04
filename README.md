@@ -1012,6 +1012,15 @@ an ended Keycloak session or a revoked user therefore takes effect within
 `session_check_ttl` seconds (default `5`, per APISIX worker), not only when the
 access token expires. Pages then log the user out, API calls get `401`.
 
+APISIX verifies Keycloak's TLS certificate on every call it makes there
+(OIDC discovery, JWKS, token introspection, including the session check above).
+**Prerequisite:** APISIX must trust the CA that issued the certificate of
+`inv_access.platform.hostname`, e.g. through `apisix.ssl.ssl_trusted_certificate`
+in the APISIX configuration; otherwise admin login and every protected API call
+fail. `oidc_ssl_verify: false` switches the verification off. It is an explicit
+opt-out that lets anyone between the gateway and Keycloak forge Keycloak's
+answers, including the role and session checks.
+
 ## Security Requirements
 
 - Non-root container runtime is enforced via pod/container `securityContext` in all deployment templates,
