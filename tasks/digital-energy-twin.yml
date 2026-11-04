@@ -196,6 +196,18 @@
     fail_msg: "The selected monorepo release is incomplete; prepare it from a completed release manifest."
   when: digital_energy_twin_application_release is defined
 
+# The backend accepts 1 to 9999 days and refuses to start on anything else.
+- name: "Digital Energy Twin: Validate the deletion link download TTL"
+  ansible.builtin.assert:
+    that:
+      - >-
+        digital_energy_twin.submission_deletion_token_ttl_days is not boolean
+        and (digital_energy_twin.submission_deletion_token_ttl_days | string) is match('^[1-9][0-9]{0,3}$')
+    fail_msg: >-
+      inv_addons['digital-energy-twin'].submission_deletion_token_ttl_days must be
+      a whole number of days from 1 to 9999 (default 30).
+  when: digital_energy_twin.submission_deletion_token_ttl_days is defined
+
 # The Matomo image is built and pinned by this addon (images/matomo,
 # vars/matomo_image.json), not by the app release.
 - name: "Digital Energy Twin: Validate the pinned Matomo image"
@@ -227,6 +239,7 @@
     digital_energy_twin_oidc_session_secret_name: "digital-energy-twin-oidc-session"
     digital_energy_twin_session_check_ttl: "{{ digital_energy_twin.session_check_ttl | default(5) | int }}"
     digital_energy_twin_feedback_mail_to: "{{ digital_energy_twin.feedback_mail_to | default('') | trim }}"
+    digital_energy_twin_submission_deletion_token_ttl_days: "{{ digital_energy_twin.submission_deletion_token_ttl_days | default(30) | int }}"
     digital_energy_twin_backend_port: "{{ digital_energy_twin.backend_port | default(5000) | int }}"
     digital_energy_twin_admin_port: "{{ digital_energy_twin.admin_port | default(8080) | int }}"
     digital_energy_twin_public_port: "{{ digital_energy_twin.public_port | default(8080) | int }}"

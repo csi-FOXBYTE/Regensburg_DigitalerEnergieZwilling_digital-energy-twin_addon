@@ -196,6 +196,20 @@ map-resources endpoint.
 address_database_url: "https://tiles.example.com/det-rg-addresses.sqlite"
 ```
 
+### `submission_deletion_token_ttl_days`
+
+Days after a submission until its deletion link stops serving the data
+download. The addon sets it as `SUBMISSION_DELETION_TOKEN_TTL_DAYS` on the
+backend. Default `30`; it must be a whole number from `1` to `9999`, otherwise
+the playbook stops before deploying (the backend would refuse to start). The
+expiry applies to links issued after the setting is deployed; checking the
+status and deleting the submission stay possible while it is stored. The
+expiry ends only the link, not the stored data.
+
+```yaml
+submission_deletion_token_ttl_days: 30
+```
+
 ## Feedback mail transport
 
 Set `feedback_mail_to` under `inv_addons.digital-energy-twin` to provision

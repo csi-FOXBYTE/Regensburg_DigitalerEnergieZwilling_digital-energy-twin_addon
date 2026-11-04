@@ -446,6 +446,7 @@ class MatomoTests(unittest.TestCase):
         context = {"digital_energy_twin_backend_image": "backend@sha256:" + "b" * 64,
                    "digital_energy_twin_database_secret_name": "db", "digital_energy_twin_backend_port": 5000,
                    "digital_energy_twin_feedback_mail_to": "", "digital_energy_twin_tiles_url": "t",
+                   "digital_energy_twin_submission_deletion_token_ttl_days": 30,
                    "digital_energy_twin_terrain_url": "t", "digital_energy_twin_address_database_url": "a",
                    "digital_energy_twin_backend_direct_host": "api", "digital_energy_twin_public_direct_host": "det",
                    "digital_energy_twin_admin_direct_host": "admin",

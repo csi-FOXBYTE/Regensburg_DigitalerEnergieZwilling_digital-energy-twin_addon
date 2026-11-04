@@ -83,6 +83,10 @@ spec:
             # from the limit so overriding one value keeps both in lockstep.
             - name: NODE_OPTIONS
               value: "{{ digital_energy_twin_backend_node_options | default('--max-old-space-size=' ~ (((digital_energy_twin_backend_memory_limit_mb | default(768)) * 0.66) | int)) }}"
+            # Days after submission until the deletion link stops serving the
+            # data download. Status check and deletion stay possible.
+            - name: SUBMISSION_DELETION_TOKEN_TTL_DAYS
+              value: "{{ digital_energy_twin_submission_deletion_token_ttl_days | string }}"
 {% if digital_energy_twin_feedback_mail_to | default("") %}
             - name: SMTP_URL
               valueFrom:
