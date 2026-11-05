@@ -89,6 +89,13 @@ class GatewaySecurityTests(unittest.TestCase):
         self.assertEqual(enabled.count("https://tiles.example.test"), 1)
         self.assertNotIn("https://matomo.det.example.test", directives(public_csp(matomo_enabled=False))["connect-src"])
 
+    def test_public_csp_lets_cesium_workers_load_their_code(self):
+        # Cesium starts blob workers that call importScripts(blob:...); without
+        # blob: in script-src the map fails to load.
+        policy = directives(public_csp(matomo_enabled=False))
+        self.assertIn("blob:", policy["script-src"])
+        self.assertIn("blob:", policy["worker-src"])
+
     def test_admin_csp_needs_no_inline_scripts(self):
         facts = task("Set security headers for the frontend HTML")["ansible.builtin.set_fact"]
         policy = directives(render(facts["digital_energy_twin_admin_csp"]))

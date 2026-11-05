@@ -372,7 +372,8 @@
 
 # The frontends' HTML gets the API headers plus a CSP measured against the apps:
 # Astro inlines its island scripts, Cesium and the calculation core compile code
-# at runtime (eval, WebAssembly) and Cesium decodes in blob workers. Tiles,
+# at runtime (eval, WebAssembly) and Cesium decodes in blob workers, which load
+# their code with importScripts(blob:...) under script-src. Tiles,
 # terrain and the address database are reached through backend redirects.
 - name: "Digital Energy Twin: Set origins the public frontend connects to"
   ansible.builtin.set_fact:
@@ -389,7 +390,7 @@
       Permissions-Policy: "geolocation=(), microphone=(), camera=()"
       Strict-Transport-Security: "max-age=31536000; includeSubDomains"
     digital_energy_twin_public_csp: >-
-      default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval';
+      default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:;
       style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com;
       img-src 'self' data: blob:; connect-src 'self' data: blob: {{ digital_energy_twin_public_connect_origins }};
       worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
