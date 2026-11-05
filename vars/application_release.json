@@ -1,89 +1,89 @@
 {
   "digital_energy_twin_application_release": {
     "repository": "csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_MonoRepo",
-    "tag": "v1.8.5",
+    "tag": "v1.8.6",
     "manifest": {
       "schema": 2,
-      "appVersion": "1.8.5",
-      "previousVersion": "1.8.4",
-      "sourceCommit": "7802c9fedf993f87a1adc2e32cae28b40d45d9d3",
-      "runId": "41998177831",
+      "appVersion": "1.8.6",
+      "previousVersion": "1.8.5",
+      "sourceCommit": "dc6a549d126d2452790429dbd8ef4308929e8905",
+      "runId": "42025149733",
       "frontend": {
         "image": "ghcr.io/csi-foxbyte/regensburg-web-frontend",
-        "fingerprint": "sha256:5f933d5944f59f735fd36461ecb7726b623cb93eb3ade91dc3c1d0ac05a5bc54",
-        "digest": "sha256:66dcd5be6fb5e1571bc4e0f0906c36a537607d433517651d2d6eb32c63764e92",
-        "sourceCommit": "7802c9fedf993f87a1adc2e32cae28b40d45d9d3",
-        "build": "41998177831-1",
+        "fingerprint": "sha256:1921ffa44ea60676142767b24a10f9443ebd9f7deef0c3663f5fab5f16c0d67a",
+        "digest": "sha256:109226a8087199a2164dc4edc4bd365e68459c3f9525d8e48a6195a04d254a48",
+        "sourceCommit": "dc6a549d126d2452790429dbd8ef4308929e8905",
+        "build": "42025149733-1",
         "platform": "linux/amd64",
-        "baseImage": "node:24.22.2-bookworm-slim@sha256:c86ecead9e55a5210ac1727de38a4ca840bf03dcaf34dc9749addbf383b1920c",
+        "baseImage": "node:24.22.2-bookworm-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9",
         "runtimeBaseImage": "nginxinc/nginx-unprivileged:1.30.6-alpine@sha256:f5116ed4606f3eb015dd4a8e28cb9b351476dc0ad4bc6e9f93b19cec130cdf03",
         "sbom": {
           "path": "/usr/share/regensburg/SBOM.cdx.json",
-          "sha256": "sha256:239e7f04854ea0d380f14784e4a0fa15186edc75e0a5d3bb23a16c86beb0616d",
-          "version": "build-41998177831-1",
-          "sourceCommit": "7802c9fedf993f87a1adc2e32cae28b40d45d9d3"
+          "sha256": "sha256:4b3a16fc2ad4a642e4494e92a6085ba4344d254c07d2c74794394c1aae6b94d3",
+          "version": "build-42025149733-1",
+          "sourceCommit": "dc6a549d126d2452790429dbd8ef4308929e8905"
         }
       },
       "adminfrontend": {
         "image": "ghcr.io/csi-foxbyte/regensburg-web-adminfrontend",
-        "fingerprint": "sha256:0c85410ac5f38fdfdf90d87273cd83b00f187e24f51d34e5018d302bb26deef8",
-        "digest": "sha256:59fd2342ca52a157fd601cd8ba768d0def8b9865bc882f4bdf3fcfe060634e65",
-        "sourceCommit": "7802c9fedf993f87a1adc2e32cae28b40d45d9d3",
-        "build": "41998177831-1",
+        "fingerprint": "sha256:ffb4d61d65a5864d81eb0914fa5939458c2085ace7d334ac00fe03907f41f153",
+        "digest": "sha256:448ade6bc3dfe310f994f60d30f2ab5cca5f936d0b3ab2dc889dbb99e60c41aa",
+        "sourceCommit": "dc6a549d126d2452790429dbd8ef4308929e8905",
+        "build": "42025149733-1",
         "platform": "linux/amd64",
-        "baseImage": "node:24.22.2-bookworm-slim@sha256:c86ecead9e55a5210ac1727de38a4ca840bf03dcaf34dc9749addbf383b1920c",
+        "baseImage": "node:24.22.2-bookworm-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9",
         "runtimeBaseImage": "nginxinc/nginx-unprivileged:1.30.6-alpine@sha256:f5116ed4606f3eb015dd4a8e28cb9b351476dc0ad4bc6e9f93b19cec130cdf03",
         "sbom": {
           "path": "/usr/share/regensburg/SBOM.cdx.json",
-          "sha256": "sha256:27fa30d30eb64d650176eb1a3e23e100bac6ffde3e2d797d4e30c3272fff0e54",
-          "version": "build-41998177831-1",
-          "sourceCommit": "7802c9fedf993f87a1adc2e32cae28b40d45d9d3"
+          "sha256": "sha256:482dd3886bcca0d1de1615c2ac77129356b15562cf54b5d005525cc787e5073a",
+          "version": "build-42025149733-1",
+          "sourceCommit": "dc6a549d126d2452790429dbd8ef4308929e8905"
         }
       },
       "backend": {
         "image": "ghcr.io/csi-foxbyte/regensburg-web-backend",
-        "fingerprint": "sha256:651c34d0ac09a422fd3889715677059d954d5ba94548cdbe50365475afbf806b",
-        "digest": "sha256:573b08969cdabd33c431c685837574bbfd08978779899c910d486c3ed0a4082f",
-        "sourceCommit": "7802c9fedf993f87a1adc2e32cae28b40d45d9d3",
-        "build": "41998177831-1",
+        "fingerprint": "sha256:ae55fb0a4ac15bf9abeb343873ef408433053021f4552eeab2defc2861a5ea22",
+        "digest": "sha256:365c8f8feeaaf67eb1842dea9d45ff16c30923f32caf29d207b058c6f5e53d5c",
+        "sourceCommit": "dc6a549d126d2452790429dbd8ef4308929e8905",
+        "build": "42025149733-1",
         "platform": "linux/amd64",
-        "baseImage": "node:24.22.2-bookworm-slim@sha256:c86ecead9e55a5210ac1727de38a4ca840bf03dcaf34dc9749addbf383b1920c",
-        "runtimeBaseImage": "debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc",
+        "baseImage": "node:24.22.2-alpine3.24@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85",
+        "runtimeBaseImage": "alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a",
         "sbom": {
           "path": "/usr/share/regensburg/SBOM.cdx.json",
-          "sha256": "sha256:f432e368cbf1fe22e109daea04afd67b09acac2c991fa9f68743da6e4c8c4853",
-          "version": "build-41998177831-1",
-          "sourceCommit": "7802c9fedf993f87a1adc2e32cae28b40d45d9d3"
+          "sha256": "sha256:367aa7450ae2776fac3e5623f6da09cd1afb3308996113b33f335b534766db55",
+          "version": "build-42025149733-1",
+          "sourceCommit": "dc6a549d126d2452790429dbd8ef4308929e8905"
         }
       },
       "sboms": {
         "schema": 1,
-        "sourceCommit": "7802c9fedf993f87a1adc2e32cae28b40d45d9d3",
+        "sourceCommit": "dc6a549d126d2452790429dbd8ef4308929e8905",
         "images": {
           "frontend": {
-            "digest": "sha256:66dcd5be6fb5e1571bc4e0f0906c36a537607d433517651d2d6eb32c63764e92",
-            "sourceCommit": "7802c9fedf993f87a1adc2e32cae28b40d45d9d3",
-            "build": "41998177831-1"
+            "digest": "sha256:109226a8087199a2164dc4edc4bd365e68459c3f9525d8e48a6195a04d254a48",
+            "sourceCommit": "dc6a549d126d2452790429dbd8ef4308929e8905",
+            "build": "42025149733-1"
           },
           "adminfrontend": {
-            "digest": "sha256:59fd2342ca52a157fd601cd8ba768d0def8b9865bc882f4bdf3fcfe060634e65",
-            "sourceCommit": "7802c9fedf993f87a1adc2e32cae28b40d45d9d3",
-            "build": "41998177831-1"
+            "digest": "sha256:448ade6bc3dfe310f994f60d30f2ab5cca5f936d0b3ab2dc889dbb99e60c41aa",
+            "sourceCommit": "dc6a549d126d2452790429dbd8ef4308929e8905",
+            "build": "42025149733-1"
           },
           "backend": {
-            "digest": "sha256:573b08969cdabd33c431c685837574bbfd08978779899c910d486c3ed0a4082f",
-            "sourceCommit": "7802c9fedf993f87a1adc2e32cae28b40d45d9d3",
-            "build": "41998177831-1"
+            "digest": "sha256:365c8f8feeaaf67eb1842dea9d45ff16c30923f32caf29d207b058c6f5e53d5c",
+            "sourceCommit": "dc6a549d126d2452790429dbd8ef4308929e8905",
+            "build": "42025149733-1"
           }
         },
         "files": {
-          "source.cdx.json": "sha256:aaa75f110be48502deec9bcae41169761592b1fce939dec61419f9ac5824df76",
-          "frontend.cdx.json": "sha256:119ee271bbfd47db7db778f084db5324ba15da3223d348e613d2f2ba3e826d5e",
-          "frontend-runtime.cdx.json": "sha256:d7893b0b565bbc3691a5c8f06fd36c947677693191eb991c6d6251ba6a7292d9",
-          "adminfrontend.cdx.json": "sha256:85017149f3c10b3800e4e2f1b5a57ace6ae1fab511fd75849e082e93ab111574",
-          "adminfrontend-runtime.cdx.json": "sha256:19b074674a109591c303351b06802e683e7aaa39ed91941e91efc0bd10a6c21a",
-          "backend.cdx.json": "sha256:10a1bffbfa04bde795674c62c3949e60546e00da66e23825e631fd55f82bd5ec",
-          "backend-runtime.cdx.json": "sha256:4b6ba8a5b2ff10a25364049b3ef0a438c4423129326d48b05b7578c853f02e7d"
+          "source.cdx.json": "sha256:f41618f0e62582438fad142182fd8507fa20e9732fca2ac1405c3ea706428081",
+          "frontend.cdx.json": "sha256:c509d89a21e2cef74bf87c053943bacfbed9dbd060a0a75e7be9db2dfea7001f",
+          "frontend-runtime.cdx.json": "sha256:6d3d05b7b99b910600dfbf7f1e5b5c51bd66fc9fcf425353b9efa3303255a4f4",
+          "adminfrontend.cdx.json": "sha256:bcfb33475037bbfc921f7b10fcc8def7d62f9289bbff892cf4657d36d58ea68c",
+          "adminfrontend-runtime.cdx.json": "sha256:e3a4aafc3fef28f09b4e55c404ad6c0531d6a16cecb9b0fb3e270f01cd123a67",
+          "backend.cdx.json": "sha256:a857629c1436b548b0e6a8cf62bb8ddc9e94eb02b81c4fcb0fc5f4176aa8a348",
+          "backend-runtime.cdx.json": "sha256:9bedadf400be9fa426a882abc0c31ee19c940edfe957ddfa3ac3ef22dfcbae85"
         }
       }
     }
