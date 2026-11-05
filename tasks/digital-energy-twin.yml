@@ -191,6 +191,102 @@
       DEZ website in Matomo.
   when: digital_energy_twin.matomo is defined
 
+# Egress NetworkPolicies: each workload may reach DNS, the in-cluster targets it
+# needs and HTTPS outside the cluster networks, see "Egress network policies" in
+# README.md. The settings end up in NetworkPolicy fields, so they are checked here
+# rather than failing later at the Kubernetes API or, worse, opening more.
+- name: "Digital Energy Twin: Validate the egress network policy settings"
+  ansible.builtin.assert:
+    that:
+      - digital_energy_twin_egress_errors | trim | length == 0
+    fail_msg: >-
+      Invalid inv_addons['digital-energy-twin'].egress: {{ digital_energy_twin_egress_errors | trim }}.
+      See "Egress network policies" in README.md.
+  vars:
+    digital_energy_twin_egress_errors: >-
+      {%- macro cidr_check(c) -%}
+      {%- if c is not string -%}no
+      {%- elif c is match('^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\.){3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])/([1-9]|[12][0-9]|3[0-2])$') -%}
+      {%- set parts = c.split('/') -%}{%- set o = parts[0].split('.') | map('int') | list -%}
+      {%- if (o[0] * 16777216 + o[1] * 65536 + o[2] * 256 + o[3]) % (2 ** (32 - parts[1] | int)) == 0 -%}ok{%- else -%}no{%- endif -%}
+      {%- elif c is match('^[0-9a-f:]*:[0-9a-f:]*/([1-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$') -%}ok
+      {%- else -%}no{%- endif -%}
+      {%- endmacro -%}
+      {%- macro port_check(p, names) -%}
+      {%- if p is not boolean and (p | string) is match('^[0-9]{1,5}$') and 1 <= p | int <= 65535 -%}ok
+      {%- elif names and p is string and p is match('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$') and p is not match('^[0-9]+$') and p | length <= 15 -%}ok
+      {%- else -%}no{%- endif -%}
+      {%- endmacro -%}
+      {%- macro labels_check(m) -%}
+      {%- set bad = [] -%}
+      {%- if m is not mapping or m | length == 0 -%}{%- set _ = bad.append(1) -%}
+      {%- else -%}{%- for k, v in m.items() if not (k is string and k is match('^([a-z0-9]([-a-z0-9.]*[a-z0-9])?/)?[A-Za-z0-9]([-A-Za-z0-9_.]{0,61}[A-Za-z0-9])?$')
+      and v is string and v is match('^([A-Za-z0-9]([-A-Za-z0-9_.]{0,61}[A-Za-z0-9])?)?$')) -%}{%- set _ = bad.append(1) -%}{%- endfor -%}
+      {%- endif -%}{{ 'no' if bad else 'ok' }}
+      {%- endmacro -%}
+      {%- set errors = [] -%}
+      {%- set label_re = '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$' -%}
+      {%- set components = ['backend', 'admin', 'public', 'matomo', 'matomo_db', 'matomo_backup'] -%}
+      {%- set cfg = digital_energy_twin.egress | default({}) -%}
+      {%- if cfg is not mapping -%}{%- set _ = errors.append('egress must be a mapping') -%}{%- set cfg = {} -%}{%- endif -%}
+      {%- set unknown = cfg.keys() | difference(['enable', 'cluster_cidrs', 'dns', 'platform_entry', 'extra']) | list -%}
+      {%- if unknown -%}{%- set _ = errors.append('unknown settings ' ~ unknown | join(', ')
+      ~ ' (known: enable, cluster_cidrs, dns, platform_entry, extra)') -%}{%- endif -%}
+      {%- if cfg.enable | default(true) is not boolean -%}{%- set _ = errors.append('enable must be true or false, without quotes') -%}{%- endif -%}
+      {%- set cidrs = cfg.cluster_cidrs | default(['10.42.0.0/16']) -%}
+      {%- if cidrs is string or cidrs is mapping or cidrs is not iterable or cidrs | length == 0 -%}
+      {%- set _ = errors.append('cluster_cidrs must be a non-empty list of the pod and service networks') -%}
+      {%- else -%}{%- for c in cidrs if cidr_check(c) != 'ok' -%}
+      {%- set _ = errors.append('cluster_cidrs entry ' ~ c ~ ' is not a network address in CIDR notation with a prefix length of at least 1 (e.g. 10.42.0.0/16)') -%}
+      {%- endfor -%}{%- endif -%}
+      {%- set dns = cfg.dns | default({}) -%}
+      {%- if dns is not mapping -%}{%- set _ = errors.append('dns must be a mapping') -%}
+      {%- else -%}
+      {%- if dns.keys() | difference(['namespace', 'pod_labels', 'port']) | list -%}{%- set _ = errors.append('dns knows only namespace, pod_labels and port') -%}{%- endif -%}
+      {%- if dns.namespace is defined and not (dns.namespace is string and dns.namespace is match(label_re)) -%}{%- set _ = errors.append('dns.namespace must be a namespace name') -%}{%- endif -%}
+      {%- if dns.pod_labels is defined and labels_check(dns.pod_labels) != 'ok' -%}{%- set _ = errors.append('dns.pod_labels must be a non-empty mapping of label names to string values') -%}{%- endif -%}
+      {%- if dns.port is defined and port_check(dns.port, false) != 'ok' -%}{%- set _ = errors.append('dns.port must be a port number from 1 to 65535') -%}{%- endif -%}
+      {%- endif -%}
+      {%- set entries = cfg.platform_entry | default('auto') -%}
+      {%- if entries != 'auto' -%}
+      {%- if entries is string or entries is mapping or entries is not iterable -%}{%- set _ = errors.append('platform_entry must be auto or a list') -%}
+      {%- else -%}{%- for entry in entries -%}
+      {%- if entry is not mapping or entry.keys() | difference(['namespace', 'pod_labels', 'ports']) | list
+      or not (entry.namespace | default('') is string and entry.namespace | default('') is match(label_re))
+      or (entry.pod_labels is defined and labels_check(entry.pod_labels) != 'ok')
+      or entry.ports is not defined or entry.ports is string or entry.ports is mapping or entry.ports is not iterable
+      or entry.ports | length == 0 -%}
+      {%- set _ = errors.append('platform_entry entry ' ~ loop.index ~ ' needs namespace, ports (numbers or port names) and optional pod_labels') -%}
+      {%- else -%}{%- for p in entry.ports if port_check(p, true) != 'ok' -%}
+      {%- set _ = errors.append('platform_entry entry ' ~ loop.index ~ ': invalid port ' ~ p) -%}{%- endfor -%}
+      {%- endif -%}
+      {%- endfor -%}{%- endif -%}
+      {%- endif -%}
+      {%- set extra = cfg.extra | default({}) -%}
+      {%- if extra is not mapping -%}{%- set _ = errors.append('extra must be a mapping of component to a list of destinations') -%}
+      {%- else -%}{%- for component, items in extra.items() -%}
+      {%- if component not in components -%}{%- set _ = errors.append('extra.' ~ component ~ ' is no component (' ~ components | join(', ') ~ ')') -%}
+      {%- elif items is string or items is mapping or items is not iterable -%}{%- set _ = errors.append('extra.' ~ component ~ ' must be a list') -%}
+      {%- else -%}{%- for item in items -%}
+      {%- set where = 'extra.' ~ component ~ ' entry ' ~ loop.index -%}
+      {%- if item is not mapping or item.keys() | difference(['cidr', 'namespace', 'pod_labels', 'ports', 'protocol']) | list
+      or (item.cidr is defined) == (item.namespace is defined) -%}
+      {%- set _ = errors.append(where ~ ' needs either cidr or namespace (with optional pod_labels), and ports') -%}
+      {%- else -%}
+      {%- if item.cidr is defined and cidr_check(item.cidr) != 'ok' -%}{%- set _ = errors.append(where ~ ': cidr ' ~ item.cidr ~ ' is not a network address in CIDR notation') -%}{%- endif -%}
+      {%- if item.cidr is defined and item.pod_labels is defined -%}{%- set _ = errors.append(where ~ ': pod_labels only go with namespace') -%}{%- endif -%}
+      {%- if item.namespace is defined and not (item.namespace is string and item.namespace is match(label_re)) -%}{%- set _ = errors.append(where ~ ': namespace must be a namespace name') -%}{%- endif -%}
+      {%- if item.pod_labels is defined and labels_check(item.pod_labels) != 'ok' -%}{%- set _ = errors.append(where ~ ': pod_labels must be a non-empty mapping of label names to string values') -%}{%- endif -%}
+      {%- if item.protocol | default('TCP') not in ['TCP', 'UDP', 'SCTP'] -%}{%- set _ = errors.append(where ~ ': protocol must be TCP, UDP or SCTP') -%}{%- endif -%}
+      {%- if item.ports is not defined or item.ports is string or item.ports is mapping or item.ports is not iterable or item.ports | length == 0 -%}
+      {%- set _ = errors.append(where ~ ': ports must be a non-empty list of port numbers') -%}
+      {%- else -%}{%- for p in item.ports if port_check(p, false) != 'ok' -%}{%- set _ = errors.append(where ~ ': invalid port ' ~ p) -%}{%- endfor -%}
+      {%- endif -%}
+      {%- endif -%}
+      {%- endfor -%}{%- endif -%}
+      {%- endfor -%}{%- endif -%}
+      {{ errors | join('; ') }}
+
 - name: "Digital Energy Twin: Validate selected application release"
   ansible.builtin.assert:
     that:
@@ -369,6 +465,18 @@
     digital_energy_twin_matomo_backup_schedule: "{{ (digital_energy_twin_matomo_config.backup | default({})).schedule | default('30 2 * * *') }}"
     digital_energy_twin_matomo_backup_keep_days: "{{ (digital_energy_twin_matomo_config.backup | default({})).keep_days | default(14) | int }}"
     digital_energy_twin_matomo_backup_size: "{{ (digital_energy_twin_matomo_config.backup | default({})).size | default('10Gi') }}"
+
+# Defaults: the k3s/RKE2 pod and service networks and CoreDNS as kube-dns.
+- name: "Digital Energy Twin: Set egress network policy defaults"
+  ansible.builtin.set_fact:
+    digital_energy_twin_egress_enabled: "{{ (digital_energy_twin.egress | default({})).enable | default(true) | bool }}"
+    digital_energy_twin_egress:
+      cluster_cidrs: "{{ (digital_energy_twin.egress | default({})).cluster_cidrs | default(['10.42.0.0/16', '10.43.0.0/16']) }}"
+      dns: >-
+        {{ {'namespace': 'kube-system', 'pod_labels': {'k8s-app': 'kube-dns'}, 'port': 53}
+        | combine((digital_energy_twin.egress | default({})).dns | default({})) }}
+      platform_entry: "{{ (digital_energy_twin.egress | default({})).platform_entry | default('auto') }}"
+      extra: "{{ (digital_energy_twin.egress | default({})).extra | default({}) }}"
 
 # The frontends' HTML gets the API headers plus a CSP measured against the apps:
 # Astro inlines its island scripts, Cesium and the calculation core compile code
@@ -736,6 +844,64 @@
   loop_control:
     loop_var: digital_energy_twin_app_netpol_template
   when: digital_energy_twin_enabled
+
+# The egress rules name in-cluster targets by the pods behind their Service
+# (policies see connections after Service NAT), and public HTTPS hosts that
+# lead back into the cluster through a LoadBalancer by the pods behind it.
+- name: "Digital Energy Twin: Find the Services the workloads connect to"
+  kubernetes.core.k8s_info:
+    kind: Service
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+  register: digital_energy_twin_egress_service_list
+  when: digital_energy_twin_enabled and digital_energy_twin_egress_enabled
+
+- name: "Digital Energy Twin: Keep the Services for the egress rules"
+  ansible.builtin.set_fact:
+    digital_energy_twin_egress_services: "{{ digital_energy_twin_egress_service_list.resources }}"
+  when: digital_energy_twin_enabled and digital_energy_twin_egress_enabled
+
+- name: "Digital Energy Twin: Report the platform entry the workloads may reach"
+  ansible.builtin.debug:
+    msg: >-
+      {% set lbs = [] %}{% for s in digital_energy_twin_egress_services
+      if s.spec.type | default('') == 'LoadBalancer' and s.spec.selector | default({}) %}{% set _ = lbs.append(s.metadata.namespace
+      ~ '/' ~ s.metadata.name) %}{% endfor %}{{ ('HTTPS to public hosts may also reach the pods behind the LoadBalancer Services '
+      ~ lbs | join(', ') ~ '.') if lbs else ('No LoadBalancer Service found. If the public Keycloak address leads back into this '
+      ~ 'cluster another way (NodePort, hostPort), set egress.platform_entry.') }}
+  when: digital_energy_twin_enabled and digital_energy_twin_egress_enabled and digital_energy_twin_egress.platform_entry == 'auto'
+
+- name: "Digital Energy Twin: Ensure egress network policies for the app workloads"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition: "{{ lookup('template', addon_dir + 'templates/digital_energy_twin_egress_netpol.yaml.j2') | from_yaml }}"
+  loop: [backend, admin, public]
+  loop_control:
+    loop_var: digital_energy_twin_egress_component
+  when: digital_energy_twin_enabled and digital_energy_twin_egress_enabled
+
+- name: "Digital Energy Twin: Remove egress network policies when switched off"
+  kubernetes.core.k8s:
+    state: absent
+    api_version: networking.k8s.io/v1
+    kind: NetworkPolicy
+    name: "{{ digital_energy_twin_egress_policy }}-egress"
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+  loop:
+    - digital-energy-twin-backend
+    - digital-energy-twin-admin
+    - digital-energy-twin-public
+    - "{{ digital_energy_twin_matomo_name }}"
+    - "{{ digital_energy_twin_matomo_db_name }}"
+    - "{{ digital_energy_twin_matomo_backup_name }}"
+  loop_control:
+    loop_var: digital_energy_twin_egress_policy
+  when: digital_energy_twin_enabled and not digital_energy_twin_egress_enabled
 
 - name: "Digital Energy Twin: Ensure admin deployment"
   kubernetes.core.k8s:
@@ -1922,6 +2088,20 @@
     loop_var: digital_energy_twin_matomo_pvc
     label: "{{ digital_energy_twin_matomo_pvc.name }}"
   when: digital_energy_twin_matomo_enabled
+
+# Before the workloads start; Matomo's rule to Keycloak follows the internal
+# Keycloak URL decided above.
+- name: "Digital Energy Twin: Ensure Matomo egress network policies"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition: "{{ lookup('template', addon_dir + 'templates/digital_energy_twin_egress_netpol.yaml.j2') | from_yaml }}"
+  loop: [matomo_db, matomo_backup, matomo]
+  loop_control:
+    loop_var: digital_energy_twin_egress_component
+  when: digital_energy_twin_matomo_enabled and digital_energy_twin_egress_enabled
 
 - name: "Digital Energy Twin: Ensure Matomo database and network rules"
   kubernetes.core.k8s:
