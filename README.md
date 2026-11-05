@@ -336,6 +336,11 @@ In all three modes, the addon copies the assembled connection URL into the
 `digital-energy-twin-database` Secret in its own namespace. The backend and its
 migration init container consume `DATABASE_URL` through `secretKeyRef`.
 The init container runs `zenstack migrate deploy` to apply the application schema.
+It runs with a read-only root filesystem and writes only to its own `/tmp`
+volume (`emptyDir`, 128 MiB): a copy of the schema and its migrations, and the
+Prisma schema engine. The backend image ships no schema engine, so the init
+container downloads it from `binaries.prisma.sh` on every start unless the
+image provides one; the pod needs egress to that host until it does.
 Changing the selected server or database does not transfer existing data.
 
 Existing installations that used the `postgres` database must migrate any data
@@ -1075,6 +1080,8 @@ answers, including the role and session checks.
   `chown`s the volume before Apache serves as `www-data`. It drops all capabilities except
   `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `SETUID`, `SETGID`, `NET_BIND_SERVICE` and `KILL`, and
   runs with a read-only root filesystem. MariaDB and the backup job run as non-root (UID 999).
+- The backend and its migration init container run with a read-only root filesystem;
+  each writes only to its own `emptyDir` mounted at `/tmp`.
 - Images must support non-root execution.
 
 ## Tests
