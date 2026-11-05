@@ -1,0 +1,160 @@
+{#-
+  Egress NetworkPolicy for one component (digital_energy_twin_egress_component).
+  Selecting a pod with an Egress policy denies all its outgoing connections
+  except the rules below: DNS, the in-cluster targets the component needs and,
+  where needed, HTTPS (and SMTP) to addresses outside the cluster networks.
+
+  Policies match the connection after Service NAT, i.e. the pod behind a
+  ClusterIP or LoadBalancer address and its container port. In-cluster targets
+  are therefore resolved from their Service: its namespace, pod selector and
+  target port. Hosts outside *.svc are reached through the external rule.
+-#}
+{%- set component = digital_energy_twin_egress_component -%}
+{%- set cfg = digital_energy_twin_egress -%}
+{%- set services = digital_energy_twin_egress_services | default([]) -%}
+{%- set svc_re = '^([a-z0-9]([-a-z0-9]*[a-z0-9])?)\\.([a-z0-9]([-a-z0-9]*[a-z0-9])?)\\.svc(\\.[a-z0-9.-]+)?\\.?$' -%}
+{%- set v4 = cfg.cluster_cidrs | reject('search', ':') | list -%}
+{%- set v6 = cfg.cluster_cidrs | select('search', ':') | list -%}
+{%- set external = [{'ipBlock': {'cidr': '0.0.0.0/0', 'except': v4}}] + ([{'ipBlock': {'cidr': '::/0', 'except': v6}}] if v6 else []) -%}
+{%- set keycloak_port = (inv_access.platform.hostname | urlsplit('port')) or 443 -%}
+{%- set https_ports = [443, keycloak_port | int] | unique | list -%}
+{%- set rules = [] -%}
+
+{#- DNS for every component. -#}
+{%- set _ = rules.append({
+  'to': [{'namespaceSelector': {'matchLabels': {'kubernetes.io/metadata.name': cfg.dns.namespace}},
+          'podSelector': {'matchLabels': cfg.dns.pod_labels}}],
+  'ports': [{'protocol': 'UDP', 'port': cfg.dns.port | int}, {'protocol': 'TCP', 'port': cfg.dns.port | int}]}) -%}
+
+{#- Targets addressed by host name: [{host, port, spilo_cluster}] -#}
+{%- set targets = [] -%}
+{%- set public_https = namespace(enabled=false) -%}
+{%- if component == 'backend' -%}
+  {#- Backend and its migrate init container: PostgreSQL, Keycloak JWKS over
+      the public URL, the SMTP server for feedback mail. -#}
+  {%- set _ = targets.append({'host': digital_energy_twin_db_host, 'port': digital_energy_twin_db_port | int,
+                              'spilo_cluster': digital_energy_twin_db_cluster_name | default('')
+                              if digital_energy_twin_db_mode in ['central', 'zalando'] else ''}) -%}
+  {%- if digital_energy_twin_feedback_mail_to | default('') | length > 0 -%}
+    {%- set _ = targets.append({'host': inv_email.server, 'port': inv_email.port | int, 'spilo_cluster': ''}) -%}
+  {%- endif -%}
+  {%- set public_https.enabled = true -%}
+{%- elif component == 'matomo' -%}
+  {%- set _ = rules.append({
+    'to': [{'podSelector': {'matchLabels': {'app': digital_energy_twin_matomo_db_name}}}],
+    'ports': [{'protocol': 'TCP', 'port': 3306}]}) -%}
+  {%- if digital_energy_twin_matomo_keycloak_internal_url | default('') | length > 0 -%}
+    {#- Token and userinfo through the internal Keycloak URL. -#}
+    {%- set _ = targets.append({'host': digital_energy_twin_matomo_keycloak_internal_url | urlsplit('hostname'),
+                                'port': (digital_energy_twin_matomo_keycloak_internal_url | urlsplit('port'))
+                                        or (443 if digital_energy_twin_matomo_keycloak_internal_url is match('https://') else 80),
+                                'spilo_cluster': ''}) -%}
+  {%- else -%}
+    {%- set public_https.enabled = true -%}
+  {%- endif -%}
+{%- elif component == 'matomo_backup' -%}
+  {%- set _ = rules.append({
+    'to': [{'podSelector': {'matchLabels': {'app': digital_energy_twin_matomo_db_name}}}],
+    'ports': [{'protocol': 'TCP', 'port': 3306}]}) -%}
+{%- endif -%}
+
+{%- for target in targets -%}
+  {%- if target.host is match(svc_re) -%}
+    {%- set name = target.host | regex_replace(svc_re, '\\1') -%}
+    {%- set ns = target.host | regex_replace(svc_re, '\\3') -%}
+    {%- set service = services | selectattr('metadata.namespace', 'equalto', ns)
+                      | selectattr('metadata.name', 'equalto', name) | list -%}
+    {%- set service = service[0] if service else {} -%}
+    {%- set spec = service.spec | default({}) -%}
+    {%- set port = spec.ports | default([]) | selectattr('port', 'equalto', target.port) | list -%}
+    {%- set port = (port[0].targetPort | default(port[0].port)) if port else target.port -%}
+    {%- set ports = [{'protocol': 'TCP', 'port': port}] -%}
+    {%- if spec.type | default('') == 'ExternalName' -%}
+      {%- set _ = rules.append({'to': external, 'ports': [{'protocol': 'TCP', 'port': target.port}]}) -%}
+    {%- elif spec.selector | default({}) -%}
+      {%- set _ = rules.append({'to': [{'namespaceSelector': {'matchLabels': {'kubernetes.io/metadata.name': ns}},
+                                         'podSelector': {'matchLabels': spec.selector}}], 'ports': ports}) -%}
+    {%- elif target.spilo_cluster -%}
+      {#- Zalando keeps the master Service without selector and points its
+          endpoints at the Spilo pod with the master role. -#}
+      {%- set _ = rules.append({'to': [{'namespaceSelector': {'matchLabels': {'kubernetes.io/metadata.name': ns}},
+                                         'podSelector': {'matchLabels': {'application': 'spilo', 'cluster-name': target.spilo_cluster}}}],
+                                 'ports': ports}) -%}
+    {%- else -%}
+      {#- Service unknown or without selector: the pods of its namespace. -#}
+      {%- set _ = rules.append({'to': [{'namespaceSelector': {'matchLabels': {'kubernetes.io/metadata.name': ns}}}],
+                                 'ports': ports}) -%}
+    {%- endif -%}
+  {%- else -%}
+    {%- set _ = rules.append({'to': external, 'ports': [{'protocol': 'TCP', 'port': target.port}]}) -%}
+  {%- endif -%}
+{%- endfor -%}
+
+{%- if public_https.enabled -%}
+  {#- HTTPS outside the cluster networks: the public Keycloak URL (and, for
+      the migrate init container, a Prisma engine download if the image lacks it). -#}
+  {%- set ports = [] -%}
+  {%- for p in https_ports -%}{%- set _ = ports.append({'protocol': 'TCP', 'port': p}) -%}{%- endfor -%}
+  {%- set _ = rules.append({'to': external, 'ports': ports}) -%}
+  {#- A public host that resolves to a LoadBalancer of this cluster is NATed
+      to the pods behind it (e.g. the ingress controller) before the policy
+      applies; those pods must be allowed as well. -#}
+  {%- set entries = [] -%}
+  {%- if cfg.platform_entry == 'auto' -%}
+    {%- for service in services if service.spec.type | default('') == 'LoadBalancer' and service.spec.selector | default({}) -%}
+      {%- set ports = [] -%}
+      {%- for p in service.spec.ports | default([]) if p.port in https_ports and p.protocol | default('TCP') == 'TCP' -%}
+        {%- set _ = ports.append(p.targetPort | default(p.port)) -%}
+      {%- endfor -%}
+      {%- if ports -%}
+        {%- set _ = entries.append({'namespace': service.metadata.namespace, 'pod_labels': service.spec.selector, 'ports': ports | unique | list}) -%}
+      {%- endif -%}
+    {%- endfor -%}
+  {%- else -%}
+    {%- set entries = cfg.platform_entry -%}
+  {%- endif -%}
+  {%- for entry in entries -%}
+    {%- set peer = {'namespaceSelector': {'matchLabels': {'kubernetes.io/metadata.name': entry.namespace}}} -%}
+    {%- if entry.pod_labels | default({}) -%}{%- set _ = peer.update({'podSelector': {'matchLabels': entry.pod_labels}}) -%}{%- endif -%}
+    {%- set ports = [] -%}
+    {%- for p in entry.ports -%}
+      {#- A quoted number stays a number; a string port is a container port name. -#}
+      {%- set _ = ports.append({'protocol': 'TCP', 'port': p | int if (p | string) is match('^[0-9]+$') else p}) -%}
+    {%- endfor -%}
+    {%- set _ = rules.append({'to': [peer], 'ports': ports}) -%}
+  {%- endfor -%}
+{%- endif -%}
+
+{#- Extra destinations from the inventory (egress.extra.<component>). -#}
+{%- for extra in cfg.extra[component] | default([]) -%}
+  {%- if extra.cidr is defined -%}
+    {%- set peer = {'ipBlock': {'cidr': extra.cidr}} -%}
+  {%- else -%}
+    {%- set peer = {'namespaceSelector': {'matchLabels': {'kubernetes.io/metadata.name': extra.namespace}}} -%}
+    {%- if extra.pod_labels | default({}) -%}{%- set _ = peer.update({'podSelector': {'matchLabels': extra.pod_labels}}) -%}{%- endif -%}
+  {%- endif -%}
+  {%- set ports = [] -%}
+  {%- for p in extra.ports -%}{%- set _ = ports.append({'protocol': extra.protocol | default('TCP'), 'port': p | int}) -%}{%- endfor -%}
+  {%- set _ = rules.append({'to': [peer], 'ports': ports}) -%}
+{%- endfor -%}
+{%- set app = {
+  'backend': 'digital-energy-twin-backend',
+  'admin': 'digital-energy-twin-admin',
+  'public': 'digital-energy-twin-public',
+  'matomo': digital_energy_twin_matomo_name | default(''),
+  'matomo_db': digital_energy_twin_matomo_db_name | default(''),
+  'matomo_backup': digital_energy_twin_matomo_backup_name | default('')}[component] -%}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: "{{ app }}-egress"
+  labels:
+    app: "{{ app }}"
+    digital-energy-twin/policy: egress
+spec:
+  podSelector:
+    matchLabels:
+      app: "{{ app }}"
+  policyTypes:
+    - Egress
+  egress: {{ rules | to_json }}

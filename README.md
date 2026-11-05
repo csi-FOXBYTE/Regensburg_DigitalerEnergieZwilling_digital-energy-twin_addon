@@ -554,6 +554,7 @@ All in the addon namespace, unless noted:
 | PVC | `digital-energy-twin-matomo-db-data` | MariaDB data |
 | NetworkPolicy | `digital-energy-twin-matomo-db` | Only Matomo and its backup job reach MariaDB (if the CNI enforces policies) |
 | NetworkPolicy | `digital-energy-twin-matomo` | Only pods in the APISIX namespace reach Matomo, so nobody can bypass the install lock from inside the cluster (if the CNI enforces policies) |
+| NetworkPolicy | `digital-energy-twin-matomo-egress`, `-matomo-db-egress`, `-matomo-backup-egress` | What Matomo, MariaDB and the backup job may connect to, see [Egress network policies](#egress-network-policies) |
 | Secret | `digital-energy-twin-matomo-db` | `password` and `root-password`, generated once and never changed by the addon |
 | Secret | `digital-energy-twin-matomo-oidc` | `client-secret` of the Keycloak client, mounted into Matomo as a file |
 | Secret | `digital-energy-twin-matomo-install` | The install link's token; exists only until Matomo is installed |
@@ -775,7 +776,8 @@ kubectl -n NS delete job matomo-backup-manual
    it), then stop it again. If the Secret `digital-energy-twin-matomo-db` was
    lost too, recreate it with the `password` from the `[database]` section of the
    backed-up `config.ini.php` before MariaDB starts on an empty volume.
-2. Start a helper pod. Its label lets it through the database NetworkPolicy:
+2. Start a helper pod. Its label lets it through the database NetworkPolicy
+   (and gives it the backup job's egress rules: DNS and MariaDB):
 
    ```yaml
    apiVersion: v1
@@ -872,7 +874,8 @@ that need a real cluster at the first rollout:
 - If the CNI enforces NetworkPolicies, a pod other than Matomo cannot connect to
   `digital-energy-twin-matomo-db:3306`, and a pod outside the APISIX namespace
   cannot reach the Matomo pod on port 80, while Matomo still turns ready and
-  APISIX still reaches it.
+  APISIX still reaches it. Matomo's Keycloak login still works under its
+  [egress policy](#egress-network-policies).
 - The playbook passes the Keycloak checks against the platform realm, and steps
   3 to 7 of [Deploying Matomo](#deploying-matomo) work.
 - After step 8: with web analytics accepted in the public frontend, visits
@@ -957,6 +960,100 @@ Ingress or Gateway/HTTPRoute resources named `digital-energy-twin-admin-host`,
 `digital-energy-twin-matomo-host`, plus
 Gateway HTTPRoutes with the `-redirect` suffix where applicable. Routes live in
 the APISIX namespace; older addon versions also used the addon namespace.
+
+### Egress network policies
+
+Besides the ingress policies (only APISIX reaches the frontends, the backend and
+Matomo), every workload gets an egress NetworkPolicy `<app>-egress` (label
+`digital-energy-twin/policy: egress`). A pod selected by it may open only the
+connections below; everything else, such as the Kubernetes API, other databases,
+Keycloak's internal port or other services in the cluster, is refused. Like all
+NetworkPolicies they take effect only if the CNI enforces them (k3s does with its
+default flannel and the built-in policy controller, unless it runs with
+`--disable-network-policy`).
+
+| Workload (pods) | May connect to |
+| --- | --- |
+| All of them | DNS: the `kube-dns` pods, UDP and TCP 53 |
+| Backend, including the `migrate` init container | PostgreSQL of the selected [database mode](#database); the SMTP server of `inv_email` (only with `feedback_mail_to`); HTTPS outside the cluster networks (Keycloak's JWKS at `inv_access.platform.hostname`, port 443 and the port of that URL), plus the platform entry pods (below) on that port |
+| Public and admin frontend | nothing else (static nginx) |
+| Matomo | its MariaDB on 3306; Keycloak: the internal Keycloak Service when Matomo uses [an internal Keycloak URL](#matomo-keycloak), otherwise HTTPS outside the cluster networks plus the platform entry pods, like the backend |
+| Matomo MariaDB | nothing else |
+| Matomo backup job (and the restore helper pod, which carries its label) | the Matomo MariaDB on 3306 |
+
+Matomo's own internet features (update check, marketplace) cannot reach the
+internet while Matomo uses the internal Keycloak URL; Matomo works without them.
+
+**How the targets are found.** Policies apply to a connection after Service
+NAT, i.e. to the pod behind a ClusterIP and its container port, not to the
+Service address. For PostgreSQL, SMTP and Matomo's internal Keycloak the addon
+looks up the Service of a `<name>.<namespace>.svc[.<cluster domain>]` host and
+allows the pods its selector picks on its target port. A Zalando master Service
+without selector (`central` and `zalando` mode) becomes the Spilo pods of that
+cluster (`application: spilo`, `cluster-name`). An in-cluster Service the addon
+cannot find, or one without selector in `existing` mode, opens the given port to
+the pods of its namespace. Any other host, e.g. an external database or SMTP
+relay, is reached through the external rule: `0.0.0.0/0` except
+`cluster_cidrs`, on that port only.
+
+**Platform entry.** A public host such as Keycloak's often leads back into the
+same cluster: its address is the LoadBalancer IP of the ingress controller (with
+k3s' ServiceLB the node's IP), and kube-proxy NATs the connection to the
+controller pod before the policy sees it. The external rule alone then does not
+let it through. With `platform_entry: auto` (default) the addon also allows the
+pods behind every Service of type LoadBalancer in the cluster, on the target port
+of its HTTPS port; the playbook lists them ("Report the platform entry ..."). Such
+pods are reachable from the internet anyway. If the public hosts reach the cluster
+another way (NodePort, hostPort, no LoadBalancer Service), list the entry pods
+yourself.
+
+**Settings** under `inv_addons.digital-energy-twin.egress`, all optional:
+
+```yaml
+egress:
+  enable: true                                       # false removes the egress policies again
+  cluster_cidrs: ["10.42.0.0/16", "10.43.0.0/16"]    # pod and service networks (k3s/RKE2 defaults)
+  dns: {namespace: kube-system, pod_labels: {k8s-app: kube-dns}, port: 53}
+  platform_entry: auto                               # or a list, see below
+  extra: {}                                          # additional destinations per workload
+```
+
+- `cluster_cidrs`: the cluster's pod and service networks, in CIDR notation,
+  excluded from the external rule so that "outside" never includes the cluster.
+  **Set them to your cluster's values** if it does not use the k3s/RKE2
+  defaults (kubeadm, for example: `10.244.0.0/16`, `10.96.0.0/12`; see
+  `--cluster-cidr` and `--service-cluster-ip-range`). With IPv6 networks in the
+  list the external rule also covers `::/0` except those.
+- `dns`: namespace, pod labels and port of the cluster DNS pods. OpenShift, for
+  example: `{namespace: openshift-dns, pod_labels: {dns.operator.openshift.io/daemonset-dns: default}, port: 5353}`.
+- `platform_entry`: `auto` or a list such as
+  `[{namespace: ingress-nginx, pod_labels: {app.kubernetes.io/name: ingress-nginx}, ports: [443]}]`
+  (`ports` are the pods' container ports, numbers or names; `pod_labels` is
+  optional). An empty list allows no entry pods.
+- `extra`: additional destinations per workload (`backend`, `admin`, `public`,
+  `matomo`, `matomo_db`, `matomo_backup`), each a list of
+  `{cidr: 192.0.2.10/32, ports: [5432]}` or
+  `{namespace: monitoring, pod_labels: {app: otel-collector}, ports: [4317]}`;
+  `protocol` defaults to `TCP`. A NodeLocal DNSCache, for example, needs
+  `{cidr: 169.254.20.10/32, ports: [53], protocol: UDP}` and the same with `TCP`
+  for every workload.
+
+The playbook refuses unknown keys, CIDRs that are not network addresses (or have
+prefix length 0), invalid labels and ports. The addon's kubeconfig must be
+allowed to list Services in all namespaces.
+
+**Check after a rollout** (with an enforcing CNI): the backend pod becomes ready
+after `migrate`, an admin login works, the public data donation and feedback
+work, Matomo's Keycloak login works and a manual backup job completes. From a
+workload, the Kubernetes API is refused while DNS works:
+
+```bash
+kubectl -n NS exec deploy/digital-energy-twin-public -- nc -z -w 3 kubernetes.default.svc 443; echo $?   # 1
+kubectl -n NS exec deploy/digital-energy-twin-public -- nslookup kubernetes.default.svc                  # resolves
+```
+
+If something the addon does not know about is blocked, add it under `extra`,
+or switch the policies off with `enable: false` while you investigate.
 
 ### APISIX route matrix
 
@@ -1081,7 +1178,12 @@ answers, including the role and session checks.
   `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `SETUID`, `SETGID`, `NET_BIND_SERVICE` and `KILL`, and
   runs with a read-only root filesystem. MariaDB and the backup job run as non-root (UID 999).
 - The backend and its migration init container run with a read-only root filesystem;
-  each writes only to its own `emptyDir` mounted at `/tmp`.
+  each writes only to its own `emptyDir` mounted at `/tmp`. Kubernetes cannot
+  mount an `emptyDir` with `noexec` (it has no mount options), so files there can
+  be executed; the migration relies on that when it has to fetch Prisma's schema
+  engine. The egress policies limit what such a file could reach.
+- Every workload has an egress NetworkPolicy, see
+  [Egress network policies](#egress-network-policies).
 - Images must support non-root execution.
 
 ## Tests

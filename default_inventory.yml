@@ -49,6 +49,15 @@ all:
             # Largest request body in bytes that APISIX passes to the backend API
             # (1 to 1048576, the backend's own limit); larger ones get 413.
             api_max_body_size: 1048576
+            # Egress NetworkPolicies for every workload, see "Egress network
+            # policies" in README.md. Optional, shown with their defaults; set
+            # cluster_cidrs to the cluster's pod and service networks.
+            # egress:
+            #   enable: true
+            #   cluster_cidrs: ["10.42.0.0/16", "10.43.0.0/16"]
+            #   dns: {namespace: kube-system, pod_labels: {k8s-app: kube-dns}, port: 53}
+            #   platform_entry: auto  # Pods behind LoadBalancer Services; or a list.
+            #   extra: {}             # Additional destinations per workload.
             # Optional. Configures the backend mail transport when supplied.
             # feedback_mail_to: "feedback@{{ DOMAIN }}"
             # Mode 1 (default): omit db to create digital_energy_twin and its
