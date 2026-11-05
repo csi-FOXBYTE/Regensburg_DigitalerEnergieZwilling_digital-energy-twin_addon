@@ -28,6 +28,13 @@
       (a list), tiles_url, terrain_url, address_database_url. The backend refuses
       a non-HTTPS KEYCLOAK_JWKS_URI, so inv_access.platform.hostname must be https://.
 
+- name: "Digital Energy Twin: Validate the gateway TLS setting"
+  ansible.builtin.assert:
+    that:
+      - digital_energy_twin.oidc_ssl_verify | default(true) is boolean
+    fail_msg: >-
+      digital-energy-twin.oidc_ssl_verify must be true or false, without quotes.
+
 - name: "Digital Energy Twin: Select routing mode"
   ansible.builtin.set_fact:
     digital_energy_twin_routing_mode: "{{ digital_energy_twin.routing_mode | default('gateway') }}"
@@ -196,6 +203,33 @@
     fail_msg: "The selected monorepo release is incomplete; prepare it from a completed release manifest."
   when: digital_energy_twin_application_release is defined
 
+# The backend accepts 1 to 9999 days and refuses to start on anything else.
+- name: "Digital Energy Twin: Validate the deletion link download TTL"
+  ansible.builtin.assert:
+    that:
+      - >-
+        digital_energy_twin.submission_deletion_token_ttl_days is not boolean
+        and (digital_energy_twin.submission_deletion_token_ttl_days | string) is match('^[1-9][0-9]{0,3}$')
+    fail_msg: >-
+      inv_addons['digital-energy-twin'].submission_deletion_token_ttl_days must be
+      a whole number of days from 1 to 9999 (default 30).
+  when: digital_energy_twin.submission_deletion_token_ttl_days is defined
+
+# The backend (Fastify default bodyLimit) refuses bodies over 1 MiB by closing
+# the connection, which APISIX reports as 502. The gateway answers them with 413
+# itself; a larger gateway limit would let them through to the backend again.
+- name: "Digital Energy Twin: Validate the API body size limit"
+  ansible.builtin.assert:
+    that:
+      - >-
+        digital_energy_twin.api_max_body_size is not boolean
+        and (digital_energy_twin.api_max_body_size | string) is match('^[1-9][0-9]{0,6}$')
+        and digital_energy_twin.api_max_body_size | int <= 1048576
+    fail_msg: >-
+      inv_addons['digital-energy-twin'].api_max_body_size must be a whole number of
+      bytes from 1 to 1048576 (default 1048576, the backend's own limit).
+  when: digital_energy_twin.api_max_body_size is defined
+
 # The Matomo image is built and pinned by this addon (images/matomo,
 # vars/matomo_image.json), not by the app release.
 - name: "Digital Energy Twin: Validate the pinned Matomo image"
@@ -213,6 +247,8 @@
     digital_energy_twin_namespace: "{{ digital_energy_twin.ns_name }}"
     digital_energy_twin_oidc_callback_path: "/oidc/callback"
     digital_energy_twin_oidc_client_id: "{{ digital_energy_twin.oidc_client_id }}"
+    # APISIX verifies Keycloak's certificate (discovery, JWKS, introspection).
+    digital_energy_twin_oidc_ssl_verify: "{{ digital_energy_twin.oidc_ssl_verify | default(true) | bool }}"
     digital_energy_twin_admin_direct_host: "{{ digital_energy_twin.admin_host }}"
     digital_energy_twin_public_direct_host: "{{ digital_energy_twin.public_host }}"
     digital_energy_twin_backend_direct_host: "{{ digital_energy_twin.backend_host }}"
@@ -225,8 +261,11 @@
     digital_energy_twin_database_secret_name: "digital-energy-twin-database"
     digital_energy_twin_smtp_secret_name: "digital-energy-twin-smtp"
     digital_energy_twin_oidc_session_secret_name: "digital-energy-twin-oidc-session"
+    digital_energy_twin_altcha_secret_name: "digital-energy-twin-altcha"
     digital_energy_twin_session_check_ttl: "{{ digital_energy_twin.session_check_ttl | default(5) | int }}"
     digital_energy_twin_feedback_mail_to: "{{ digital_energy_twin.feedback_mail_to | default('') | trim }}"
+    digital_energy_twin_submission_deletion_token_ttl_days: "{{ digital_energy_twin.submission_deletion_token_ttl_days | default(30) | int }}"
+    digital_energy_twin_api_max_body_size: "{{ digital_energy_twin.api_max_body_size | default(1048576) | int }}"
     digital_energy_twin_backend_port: "{{ digital_energy_twin.backend_port | default(5000) | int }}"
     digital_energy_twin_admin_port: "{{ digital_energy_twin.admin_port | default(8080) | int }}"
     digital_energy_twin_public_port: "{{ digital_energy_twin.public_port | default(8080) | int }}"
@@ -242,7 +281,8 @@
       cors:
         allow_origins: "{{ ((['https://' ~ digital_energy_twin.public_host, 'https://' ~ digital_energy_twin.admin_host] + digital_energy_twin.backend_cors_additional_origins) | unique) | join(',') }}"
         allow_methods: "GET,POST,PUT,PATCH,DELETE,OPTIONS"
-        allow_headers: "Accept,Authorization,Content-Type,Origin,Referer,User-Agent,X-Access-Token,X-Requested-With"
+        # X-Altcha carries the Altcha solution of the public writes.
+        allow_headers: "Accept,Authorization,Content-Type,Origin,Referer,User-Agent,X-Access-Token,X-Requested-With,X-Altcha"
         expose_headers: "Content-Length,Content-Type,Date,Server"
         max_age: 3600
         allow_credential: true
@@ -263,6 +303,24 @@
             X-XSS-Protection: "1; mode=block"
             Strict-Transport-Security: "max-age=31536000; includeSubDomains"
             Content-Security-Policy: "default-src 'self'; frame-ancestors 'none'; base-uri 'self'"
+
+# The admin frontend calls its API same-origin. No other origin may send the
+# admin session along, the public frontend (same site) in particular.
+- name: "Digital Energy Twin: Set CORS for the admin API"
+  ansible.builtin.set_fact:
+    digital_energy_twin_backend_admin_cors: >-
+      {{ digital_energy_twin_backend_common_plugins.cors
+      | combine({'allow_origins': 'https://' ~ digital_energy_twin_admin_direct_host}) }}
+
+# APISIX answers bodies over the limit with 413 before they reach the backend
+# (client-control checks Content-Length and caps chunked bodies). Built as one
+# expression so max_body_size stays an integer in the route JSON.
+- name: "Digital Energy Twin: Set the body size limit for the API routes"
+  ansible.builtin.set_fact:
+    digital_energy_twin_backend_client_control: "{{ {'max_body_size': digital_energy_twin_api_max_body_size | int} }}"
+    digital_energy_twin_backend_api_plugins: >-
+      {{ digital_energy_twin_backend_common_plugins
+      | combine({'client-control': {'max_body_size': digital_energy_twin_api_max_body_size | int}}) }}
 
 - name: "Digital Energy Twin: Load Matomo config"
   ansible.builtin.set_fact:
@@ -604,6 +662,37 @@
       stringData:
         SMTP_URL: "{{ digital_energy_twin_smtp_url }}"
   when: digital_energy_twin_enabled and digital_energy_twin_feedback_mail_to | length > 0
+  no_log: true
+
+- name: "Digital Energy Twin: Get Altcha HMAC key secret"
+  kubernetes.core.k8s_info:
+    kind: Secret
+    namespace: "{{ k8s_namespace }}"
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    name: "{{ digital_energy_twin_altcha_secret_name }}"
+  register: digital_energy_twin_altcha_secret_info
+  when: digital_energy_twin_enabled
+  no_log: true
+
+# The backend signs the Altcha challenges of the public writes with this key
+# and refuses to start without it. Generated once and kept, so a redeploy does
+# not invalidate challenges in flight; delete the Secret to rotate the key.
+- name: "Digital Energy Twin: Create Altcha HMAC key secret once"
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k8s_config }}"
+    context: "{{ k8s_context }}"
+    namespace: "{{ k8s_namespace }}"
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: "{{ digital_energy_twin_altcha_secret_name }}"
+      type: Opaque
+      stringData:
+        ALTCHA_HMAC_KEY: "{{ lookup('ansible.builtin.password', '/dev/null', length=64, chars=['ascii_letters', 'digits']) }}"
+  when: digital_energy_twin_enabled and digital_energy_twin_altcha_secret_info.resources | length == 0
   no_log: true
 
 - name: "Digital Energy Twin: Ensure placeholder content configmap"
@@ -1069,7 +1158,8 @@
 # Keycloak whether the access token's session is still active: the gateway keeps
 # the session in the cookie and would otherwise accept a logged-out cookie until
 # the access token expires. Results are cached per worker for a few seconds.
-# TLS to Keycloak is not verified, like the openid-connect plugin's default.
+# Like the openid-connect plugin, it verifies Keycloak's certificate unless
+# oidc_ssl_verify is false; APISIX must trust the CA that issued it.
 - name: "Digital Energy Twin: Set the admin gate for protected routes"
   ansible.builtin.set_fact:
     digital_energy_twin_admin_gate_function: |-
@@ -1134,7 +1224,7 @@
             client_secret = client_secret
           }),
           headers = { ["Content-Type"] = "application/x-www-form-urlencoded" },
-          ssl_verify = false
+          ssl_verify = {{ 'true' if digital_energy_twin_oidc_ssl_verify | bool else 'false' }}
         })
         if not res or res.status ~= 200 then
           core.log.error("token introspection failed: ", err or res.status)
@@ -1268,6 +1358,7 @@
           discovery: "{{ inv_access.platform.hostname }}/realms/{{ inv_access.tenant.realm_name }}/.well-known/openid-configuration"
           introspection_endpoint: "{{ inv_access.platform.hostname }}/realms/{{ inv_access.tenant.realm_name }}/protocol/openid-connect/token/introspect"
           introspection_endpoint_auth_method: post
+          ssl_verify: "{{ digital_energy_twin_oidc_ssl_verify | bool }}"
           realm: "{{ inv_access.tenant.realm_name }}"
           set_userinfo_header: true
           set_access_token_header: true
@@ -1328,7 +1419,8 @@
       upstream_id: "digital-energy-twin-backend-upstream"
       status: 1
       plugins:
-        cors: "{{ digital_energy_twin_backend_common_plugins.cors }}"
+        cors: "{{ digital_energy_twin_backend_admin_cors }}"
+        client-control: "{{ digital_energy_twin_backend_client_control }}"
         limit-count: "{{ digital_energy_twin_backend_common_plugins['limit-count'] }}"
         response-rewrite: "{{ digital_energy_twin_backend_common_plugins['response-rewrite'] }}"
         openid-connect:
@@ -1342,6 +1434,7 @@
           discovery: "{{ inv_access.platform.hostname }}/realms/{{ inv_access.tenant.realm_name }}/.well-known/openid-configuration"
           introspection_endpoint: "{{ inv_access.platform.hostname }}/realms/{{ inv_access.tenant.realm_name }}/protocol/openid-connect/token/introspect"
           introspection_endpoint_auth_method: post
+          ssl_verify: "{{ digital_energy_twin_oidc_ssl_verify | bool }}"
           realm: "{{ inv_access.tenant.realm_name }}"
           set_access_token_header: true
           set_userinfo_header: false
@@ -1376,6 +1469,7 @@
       upstream_id: "digital-energy-twin-backend-upstream"
       status: 1
       plugins:
+        response-rewrite: "{{ digital_energy_twin_backend_common_plugins['response-rewrite'] }}"
         serverless-pre-function:
           _meta:
             disable: false
@@ -1411,7 +1505,7 @@
       priority: 100
       upstream_id: "digital-energy-twin-backend-upstream"
       status: 1
-      plugins: "{{ digital_energy_twin_backend_common_plugins }}"
+      plugins: "{{ digital_energy_twin_backend_api_plugins }}"
     headers:
       Accept: application/json
       X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
@@ -1447,7 +1541,7 @@
       uri: "/api/*"
       upstream_id: "digital-energy-twin-backend-upstream"
       status: 1
-      plugins: "{{ digital_energy_twin_backend_common_plugins }}"
+      plugins: "{{ digital_energy_twin_backend_api_plugins }}"
     headers:
       Accept: application/json
       X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
@@ -1518,7 +1612,8 @@
       upstream_id: "digital-energy-twin-backend-upstream"
       status: 1
       plugins:
-        cors: "{{ digital_energy_twin_backend_common_plugins.cors }}"
+        cors: "{{ digital_energy_twin_backend_admin_cors }}"
+        client-control: "{{ digital_energy_twin_backend_client_control }}"
         limit-count: "{{ digital_energy_twin_backend_common_plugins['limit-count'] }}"
         response-rewrite: "{{ digital_energy_twin_backend_common_plugins['response-rewrite'] }}"
         openid-connect:
@@ -1532,6 +1627,7 @@
           discovery: "{{ inv_access.platform.hostname }}/realms/{{ inv_access.tenant.realm_name }}/.well-known/openid-configuration"
           introspection_endpoint: "{{ inv_access.platform.hostname }}/realms/{{ inv_access.tenant.realm_name }}/protocol/openid-connect/token/introspect"
           introspection_endpoint_auth_method: post
+          ssl_verify: "{{ digital_energy_twin_oidc_ssl_verify | bool }}"
           realm: "{{ inv_access.tenant.realm_name }}"
           set_access_token_header: true
           set_userinfo_header: false
@@ -2653,7 +2749,7 @@
       uri: "/*"
       upstream_id: "digital-energy-twin-matomo-upstream"
       status: 1
-      plugins: "{{ {} if digital_energy_twin_matomo_installed else digital_energy_twin_matomo_install_lock }}"
+      plugins: "{{ digital_energy_twin_matomo_headers if digital_energy_twin_matomo_installed else digital_energy_twin_matomo_install_lock }}"
     headers:
       Accept: application/json
       X-API-KEY: "{{ inv_access.apisix.api_credentials.admin_role }}"
@@ -2661,6 +2757,15 @@
       - 200
       - 201
   vars:
+    # Matomo embeds its widgets and opt-out in other sites and sets its own
+    # frame rules, so no CSP or X-Frame-Options here.
+    digital_energy_twin_matomo_headers:
+      response-rewrite:
+        headers:
+          set:
+            Strict-Transport-Security: "max-age=31536000; includeSubDomains"
+            X-Content-Type-Options: "nosniff"
+            Referrer-Policy: "same-origin"
     digital_energy_twin_matomo_install_lock:
       serverless-pre-function:
         _meta:

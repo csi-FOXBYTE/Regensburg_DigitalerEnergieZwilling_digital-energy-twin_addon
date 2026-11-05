@@ -444,8 +444,10 @@ class MatomoTests(unittest.TestCase):
 
         backend = (ROOT / "templates/digital_energy_twin_backend_deploy.yaml.j2").read_text()
         context = {"digital_energy_twin_backend_image": "backend@sha256:" + "b" * 64,
-                   "digital_energy_twin_database_secret_name": "db", "digital_energy_twin_backend_port": 5000,
+                   "digital_energy_twin_database_secret_name": "db", "digital_energy_twin_altcha_secret_name": "altcha",
+                   "digital_energy_twin_backend_port": 5000,
                    "digital_energy_twin_feedback_mail_to": "", "digital_energy_twin_tiles_url": "t",
+                   "digital_energy_twin_submission_deletion_token_ttl_days": 30,
                    "digital_energy_twin_terrain_url": "t", "digital_energy_twin_address_database_url": "a",
                    "digital_energy_twin_backend_direct_host": "api", "digital_energy_twin_public_direct_host": "det",
                    "digital_energy_twin_admin_direct_host": "admin",
@@ -471,9 +473,10 @@ class MatomoTests(unittest.TestCase):
         route = task("Upsert Matomo direct-host route")
         evaluate = ENV.compile_expression(route["ansible.builtin.uri"]["body"]["plugins"].strip()[2:-2])
         lock = {"serverless-pre-function": {}}
-        self.assertEqual(evaluate(digital_energy_twin_matomo_installed=True,
-                                  digital_energy_twin_matomo_install_lock=lock), {})
-        self.assertEqual(evaluate(digital_energy_twin_matomo_installed=False,
+        headers = route["vars"]["digital_energy_twin_matomo_headers"]
+        self.assertEqual(evaluate(digital_energy_twin_matomo_installed=True, digital_energy_twin_matomo_headers=headers,
+                                  digital_energy_twin_matomo_install_lock=lock), headers)
+        self.assertEqual(evaluate(digital_energy_twin_matomo_installed=False, digital_energy_twin_matomo_headers=headers,
                                   digital_energy_twin_matomo_install_lock=lock), lock)
         plugin = route["vars"]["digital_energy_twin_matomo_install_lock"]["serverless-pre-function"]
         self.assertEqual(plugin["phase"], "rewrite")
@@ -481,6 +484,15 @@ class MatomoTests(unittest.TestCase):
         for expected in ('local token = "T0ken"', 'ngx.req.get_uri_args()["install"] == token',
                          "HttpOnly", "Secure", "SameSite=Lax", 'ngx.redirect("/", 302)', "ngx.exit(403)"):
             self.assertIn(expected, lua)
+
+    def test_installed_matomo_gets_security_headers_but_keeps_its_frame_rules(self):
+        headers = task("Upsert Matomo direct-host route")["vars"]["digital_energy_twin_matomo_headers"]
+        self.assertEqual(list(headers), ["response-rewrite"])
+        self.assertEqual(headers["response-rewrite"]["headers"]["set"], {
+            "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+            "X-Content-Type-Options": "nosniff",
+            "Referrer-Policy": "same-origin",
+        })
 
     def test_install_token_exists_only_while_matomo_is_not_installed(self):
         create = task("Create the Matomo install token once")

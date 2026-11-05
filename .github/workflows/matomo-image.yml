@@ -5,9 +5,8 @@ name: Build Matomo image
 on:
   workflow_dispatch:
 
-permissions:
-  contents: write
-  packages: write
+# Nothing by default; the job below gets only what it needs.
+permissions: {}
 
 # Same group as the addon release: both commit to main.
 concurrency:
@@ -26,15 +25,20 @@ jobs:
   build-matomo:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # commits the pin to main
+      packages: write # pushes the image to ghcr.io
     steps:
+      # Keeps the checkout credentials: the last step pushes the pin to main
+      # with them.
       - name: Checkout addon
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -49,13 +53,15 @@ jobs:
             docker buildx imagetools inspect "$1" --format '{{json .Manifest}}' \
               | python3 -c 'import json, sys; print(json.load(sys.stdin)["digest"])'
           }
-          echo "node=$NODE_BASE@$(digest "$NODE_BASE")" >> "$GITHUB_OUTPUT"
-          echo "matomo=$MATOMO_BASE@$(digest "$MATOMO_BASE")" >> "$GITHUB_OUTPUT"
-          echo "build=${{ github.run_id }}-${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
+          {
+            echo "node=$NODE_BASE@$(digest "$NODE_BASE")"
+            echo "matomo=$MATOMO_BASE@$(digest "$MATOMO_BASE")"
+            echo "build=$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: images/matomo
           platforms: ${{ env.PLATFORM }}
@@ -79,6 +85,9 @@ jobs:
         shell: bash
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
+          BUILD: ${{ steps.bases.outputs.build }}
+          NODE_BASE_IMAGE: ${{ steps.bases.outputs.node }}
+          RUNTIME_BASE_IMAGE: ${{ steps.bases.outputs.matomo }}
         run: |
           set -euo pipefail
           mkdir -p .local
@@ -87,9 +96,9 @@ jobs:
           docker cp "$container:/usr/share/regensburg/SBOM.cdx.json" .local/matomo-image-sbom.json
           docker rm "$container"
           python3 scripts/pin_matomo_image.py --image "$IMAGE" --digest "$DIGEST" \
-            --build "${{ steps.bases.outputs.build }}" --source "$GITHUB_SHA" --platform "$PLATFORM" \
-            --base-image "${{ steps.bases.outputs.node }}" \
-            --runtime-base-image "${{ steps.bases.outputs.matomo }}" \
+            --build "$BUILD" --source "$GITHUB_SHA" --platform "$PLATFORM" \
+            --base-image "$NODE_BASE_IMAGE" \
+            --runtime-base-image "$RUNTIME_BASE_IMAGE" \
             --embedded-sbom .local/matomo-image-sbom.json \
             --timestamp "$(TZ=UTC git show -s --date=format-local:%Y-%m-%dT%H:%M:%SZ --format=%cd "$GITHUB_SHA")"
 
@@ -103,6 +112,8 @@ jobs:
 
       - name: Commit the pin on main
         shell: bash
+        env:
+          BUILD: ${{ steps.bases.outputs.build }}
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
@@ -112,6 +123,6 @@ jobs:
             echo "Nothing to pin"
             exit 0
           fi
-          git commit -m "chore: pinned matomo image build-${{ steps.bases.outputs.build }}"
+          git commit -m "chore: pinned matomo image build-$BUILD"
           # Fails if main moved since the dispatch; start the workflow again then.
           git push origin HEAD:main

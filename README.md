@@ -196,6 +196,20 @@ map-resources endpoint.
 address_database_url: "https://tiles.example.com/det-rg-addresses.sqlite"
 ```
 
+### `submission_deletion_token_ttl_days`
+
+Days after a submission until its deletion link stops serving the data
+download. The addon sets it as `SUBMISSION_DELETION_TOKEN_TTL_DAYS` on the
+backend. Default `30`; it must be a whole number from `1` to `9999`, otherwise
+the playbook stops before deploying (the backend would refuse to start). The
+expiry applies to links issued after the setting is deployed; checking the
+status and deleting the submission stay possible while it is stored. The
+expiry ends only the link, not the stored data.
+
+```yaml
+submission_deletion_token_ttl_days: 30
+```
+
 ## Feedback mail transport
 
 Set `feedback_mail_to` under `inv_addons.digital-energy-twin` to provision
@@ -215,6 +229,22 @@ from Civitas Core `inv_email`. With `starttls: true`, it creates an
 `starttls: false`, it creates an `smtps://` URL for TLS from connection
 start. Both modes require TLS. The SMTP URL is stored in a Kubernetes
 Secret and supplied only to the backend container.
+
+## Altcha for public writes
+
+The backend accepts a public data donation (`POST /api/public/submissions`) or
+feedback (`POST /api/public/feedback`) only with a solved, unused Altcha
+proof-of-work challenge in the `X-Altcha` header; it issues the challenges
+itself at `GET /api/public/altcha/challenge`. The addon generates the HMAC key
+for these challenges once (64 random letters and digits) and keeps it in the
+Secret `digital-energy-twin-altcha`, which the backend reads as
+`ALTCHA_HMAC_KEY`. Without it the backend does not start. To rotate the key,
+delete the Secret, run the addon again and restart the backend deployment;
+challenges in flight then fail once.
+The backend remembers used challenges in memory, which is sufficient for its
+single replica. The gateway's CORS settings allow the `X-Altcha` header. The
+public CSP needs no change: the widget and its worker are served by the
+public frontend itself.
 
 ## Database
 
@@ -306,6 +336,11 @@ In all three modes, the addon copies the assembled connection URL into the
 `digital-energy-twin-database` Secret in its own namespace. The backend and its
 migration init container consume `DATABASE_URL` through `secretKeyRef`.
 The init container runs `zenstack migrate deploy` to apply the application schema.
+It runs with a read-only root filesystem and writes only to its own `/tmp`
+volume (`emptyDir`, 128 MiB): a copy of the schema and its migrations, and the
+Prisma schema engine. The backend image ships no schema engine, so the init
+container downloads it from `binaries.prisma.sh` on every start unless the
+image provides one; the pod needs egress to that host until it does.
 Changing the selected server or database does not transfer existing data.
 
 Existing installations that used the `postgres` database must migrate any data
@@ -947,7 +982,9 @@ the APISIX namespace; older addon versions also used the addon namespace.
 
 - `/*` -> Matomo. Until Matomo is installed, only a browser that opened the
   one-time install link gets through; everyone else gets `403`. Afterwards it is
-  open, and Matomo and Keycloak handle the login.
+  open, and Matomo and Keycloak handle the login. The gateway then adds HSTS,
+  `X-Content-Type-Options: nosniff` and `Referrer-Policy: same-origin`; frame
+  rules stay with Matomo, whose widgets and opt-out are embedded in other sites.
 
 Application permissions and role assignment are described in
 [Admin frontend access](#admin-frontend-access).
@@ -960,12 +997,41 @@ Applied on backend routes:
 - `limit-count`
 - `response-rewrite` (security headers)
 
+The `403` route for `/api/admin/*` on `public_host` sends the same security
+headers.
+
 CORS defaults to:
 
 - `https://{{ public_host }}`
 - `https://{{ admin_host }}`
 
 You can extend allowed origins with `backend_cors_additional_origins`.
+
+The admin API routes (`/api/*` on `admin_host`, `/api/admin/*` on
+`backend_host`) allow only `https://{{ admin_host }}`, without the public host
+and without `backend_cors_additional_origins`: the admin frontend calls its API
+same-origin, and no other site may send the admin session along.
+
+### Request body size limit
+
+The API routes (`/api/*` on `public_host` and `admin_host`, `/api/*` and
+`/api/admin/*` on `backend_host`) also carry APISIX's `client-control` plugin
+with `max_body_size` set to `api_max_body_size` bytes. APISIX answers larger
+request bodies itself with `413 Request Entity Too Large`; this covers bodies
+announced with `Content-Length` and chunked ones. The backend (Fastify's default
+`bodyLimit`) accepts at most 1 MiB and would otherwise close the connection
+early, which APISIX reports as `502`.
+
+Default `1048576` (1 MiB, the backend's limit). It must be a whole number of
+bytes from `1` to `1048576`, otherwise the playbook stops before deploying: a
+larger value would let oversized bodies reach the backend again. `client-control`
+is part of APISIX's default plugin list; if the platform's APISIX
+configuration replaces that list, it must include `client-control`, or the
+route updates fail.
+
+```yaml
+api_max_body_size: 1048576
+```
 
 ### Frontend security headers
 
@@ -998,6 +1064,15 @@ an ended Keycloak session or a revoked user therefore takes effect within
 `session_check_ttl` seconds (default `5`, per APISIX worker), not only when the
 access token expires. Pages then log the user out, API calls get `401`.
 
+APISIX verifies Keycloak's TLS certificate on every call it makes there
+(OIDC discovery, JWKS, token introspection, including the session check above).
+**Prerequisite:** APISIX must trust the CA that issued the certificate of
+`inv_access.platform.hostname`, e.g. through `apisix.ssl.ssl_trusted_certificate`
+in the APISIX configuration; otherwise admin login and every protected API call
+fail. `oidc_ssl_verify: false` switches the verification off. It is an explicit
+opt-out that lets anyone between the gateway and Keycloak forge Keycloak's
+answers, including the role and session checks.
+
 ## Security Requirements
 
 - Non-root container runtime is enforced via pod/container `securityContext` in all deployment templates,
@@ -1005,7 +1080,21 @@ access token expires. Pages then log the user out, API calls get `401`.
   `chown`s the volume before Apache serves as `www-data`. It drops all capabilities except
   `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `SETUID`, `SETGID`, `NET_BIND_SERVICE` and `KILL`, and
   runs with a read-only root filesystem. MariaDB and the backup job run as non-root (UID 999).
+- The backend and its migration init container run with a read-only root filesystem;
+  each writes only to its own `emptyDir` mounted at `/tmp`.
 - Images must support non-root execution.
+
+## Tests
+
+The offline unit tests need Python 3 with Jinja2 and PyYAML, and Node.js for
+the Matomo SBOM checks:
+
+```bash
+python3 -m unittest discover -s tests
+```
+
+The **CI** workflow runs them and [actionlint](https://github.com/rhysd/actionlint)
+on every pull request and on `main`, with read-only repository access.
 
 ## Deploy script
 

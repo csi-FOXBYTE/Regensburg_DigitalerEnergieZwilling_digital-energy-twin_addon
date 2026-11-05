@@ -28,18 +28,47 @@ spec:
             runAsNonRoot: true
             runAsUser: 1000
             allowPrivilegeEscalation: false
-            # zenstack/prisma unpacks its query engine outside /tmp during
-            # `migrate deploy`; a read-only root filesystem fails with EROFS.
-            # The init container is short-lived, non-root and drops all caps.
-            readOnlyRootFilesystem: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
           command:
             - /bin/sh
             - -c
-            - exec node_modules/.bin/zenstack migrate deploy
+            # Everything the migration writes goes to its own /tmp volume:
+            # zenstack writes ~schema.prisma next to the schema, so it migrates
+            # a copy of the schema and its migrations. The image ships no Prisma
+            # schema engine and Prisma would download it into node_modules, so
+            # it is fetched into /tmp unless the image provides one.
+            - |
+              set -e
+              cp -R src/zenstack /tmp/zenstack
+              PRISMA_SCHEMA_ENGINE_BINARY="$(node -e '
+              const fs = require("fs");
+              const path = require("path");
+              const { createRequire } = require("module");
+              const cli = createRequire(fs.realpathSync("node_modules/@zenstackhq/cli/package.json"));
+              const engines = createRequire(cli.resolve("prisma/build/index.js")).resolve("@prisma/engines");
+              const { enginesVersion, getEnginesPath } = require(engines);
+              const bundled = fs.readdirSync(getEnginesPath()).find((name) => name.startsWith("schema-engine-"));
+              if (bundled) {
+                console.log(path.join(getEnginesPath(), bundled));
+              } else {
+                fs.mkdirSync("/tmp/prisma-engines", { recursive: true });
+                createRequire(engines)("@prisma/fetch-engine")
+                  .download({ binaries: { "schema-engine": "/tmp/prisma-engines" }, version: enginesVersion, showProgress: false, failSilent: false })
+                  .then((paths) => console.log(Object.values(paths["schema-engine"])[0]));
+              }
+              ')"
+              export PRISMA_SCHEMA_ENGINE_BINARY
+              exec node_modules/.bin/zenstack migrate deploy --schema /tmp/zenstack/schema.zmodel
           env:
+            # Prisma's engine cache and CLI state live under $HOME.
+            - name: HOME
+              value: /tmp
+            # No version check against checkpoint.prisma.io.
+            - name: CHECKPOINT_DISABLE
+              value: "1"
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
@@ -56,7 +85,7 @@ spec:
             limits:
               memory: "{{ digital_energy_twin_migrate_memory_limit_mb | default(512) }}Mi"
           volumeMounts:
-            - name: tmp
+            - name: migrate-tmp
               mountPath: /tmp
       containers:
         - name: backend
@@ -83,6 +112,17 @@ spec:
             # from the limit so overriding one value keeps both in lockstep.
             - name: NODE_OPTIONS
               value: "{{ digital_energy_twin_backend_node_options | default('--max-old-space-size=' ~ (((digital_energy_twin_backend_memory_limit_mb | default(768)) * 0.66) | int)) }}"
+            # Days after submission until the deletion link stops serving the
+            # data download. Status check and deletion stay possible.
+            - name: SUBMISSION_DELETION_TOKEN_TTL_DAYS
+              value: "{{ digital_energy_twin_submission_deletion_token_ttl_days | string }}"
+            # Signs the Altcha challenges of the public writes; generated once
+            # by the tasks. The backend refuses to start without it.
+            - name: ALTCHA_HMAC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ digital_energy_twin_altcha_secret_name }}"
+                  key: ALTCHA_HMAC_KEY
 {% if digital_energy_twin_feedback_mail_to | default("") %}
             - name: SMTP_URL
               valueFrom:
@@ -160,3 +200,9 @@ spec:
       volumes:
         - name: tmp
           emptyDir: {}
+        # Schema copy, Prisma engine cache and schema engine (~40 MB); kept
+        # apart from the backend's /tmp so the engine does not outlive the
+        # migration.
+        - name: migrate-tmp
+          emptyDir:
+            sizeLimit: 128Mi

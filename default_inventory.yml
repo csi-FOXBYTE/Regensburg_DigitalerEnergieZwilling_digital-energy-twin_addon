@@ -14,6 +14,8 @@ all:
             ns_name: "{{ ENVIRONMENT }}-digitalenergytwin"
             ns_kubeconfig: "{{ kubeconfig_file | default('kubeconfig') }}"
             oidc_client_id: "digital-energy-twin"
+            # APISIX verifies the Keycloak certificate; it must trust its CA. false is an explicit opt-out.
+            oidc_ssl_verify: true
             # gateway: use inv_k8s.gateway_class; ingress: use inv_k8s.ingress_class.
             # Select ingress for an existing ingress-nginx deployment without Gateway API.
             routing_mode: gateway
@@ -41,6 +43,12 @@ all:
               # data_size: "5Gi"
               # db_size: "10Gi"
               # backup: {enable: true, target: pvc, schedule: "30 2 * * *", keep_days: 14, size: "10Gi"}
+            # Days after submission until the deletion link stops serving the
+            # data download (1 to 9999). Deleting stays possible.
+            submission_deletion_token_ttl_days: 30
+            # Largest request body in bytes that APISIX passes to the backend API
+            # (1 to 1048576, the backend's own limit); larger ones get 413.
+            api_max_body_size: 1048576
             # Optional. Configures the backend mail transport when supplied.
             # feedback_mail_to: "feedback@{{ DOMAIN }}"
             # Mode 1 (default): omit db to create digital_energy_twin and its
