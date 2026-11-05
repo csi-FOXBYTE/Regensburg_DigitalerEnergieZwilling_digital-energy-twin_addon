@@ -30,6 +30,9 @@ RUN mkdir -p /opt/matomo-plugins/LoginOIDC \
 COPY plugins/NoPasswordReset /opt/matomo-plugins/NoPasswordReset
 COPY common.config.ini.php config.php /opt/matomo-config/
 COPY apache-logging.conf /etc/apache2/conf-enabled/dez-logging.conf
+COPY apache-security.conf /etc/apache2/conf-enabled/zz-dez-security.conf
+# No PHP version in the X-Powered-By header (HARD-03).
+RUN printf 'expose_php = Off\n' > "$PHP_INI_DIR/conf.d/zz-dez-security.ini"
 RUN sed -i 's|^\(\s*CustomLog .*access\.log\) combined$|\1 dez|' /etc/apache2/sites-available/000-default.conf \
   && grep -q 'CustomLog .*access\.log dez$' /etc/apache2/sites-available/000-default.conf
 COPY --chmod=755 entrypoint.sh /usr/local/bin/matomo-entrypoint.sh
