@@ -40,6 +40,15 @@ class MatomoImageTests(unittest.TestCase):
         dockerfile = (IMAGE_DIR / "Dockerfile").read_text()
         self.assertIn(f"ADD --checksum=sha256:{sha256} \\\n  {url} ", dockerfile)
 
+    def test_image_hides_apache_and_php_versions(self):
+        dockerfile = (IMAGE_DIR / "Dockerfile").read_text()
+        conf = (IMAGE_DIR / "apache-security.conf").read_text()
+        # Loaded after Debian's security.conf (conf-enabled is read alphabetically).
+        self.assertIn("COPY apache-security.conf /etc/apache2/conf-enabled/zz-dez-security.conf\n", dockerfile)
+        self.assertRegex(conf, r"(?m)^ServerTokens Prod$")
+        self.assertRegex(conf, r"(?m)^ServerSignature Off$")
+        self.assertIn("printf 'expose_php = Off\\n' > \"$PHP_INI_DIR/conf.d/zz-dez-security.ini\"", dockerfile)
+
     def test_workflow_builds_from_the_dockerfile_defaults(self):
         dockerfile = (IMAGE_DIR / "Dockerfile").read_text()
         self.assertIn(f"ARG NODE_BASE_IMAGE={WORKFLOW['env']['NODE_BASE']}\n", dockerfile)
