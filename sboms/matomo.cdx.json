@@ -6,8 +6,8 @@
     "component": {
       "type": "application",
       "name": "regensburg-web-matomo",
-      "version": "build-41606428409-1",
-      "bom-ref": "regensburg:matomo:build-41606428409-1",
+      "version": "build-42006097003-1",
+      "bom-ref": "regensburg:matomo:build-42006097003-1",
       "licenses": [
         {
           "expression": "GPL-3.0-or-later"
@@ -16,11 +16,11 @@
       "properties": [
         {
           "name": "vcs:commit",
-          "value": "eb15ab3817609445bb64ca2332d2b6bc39d328f2"
+          "value": "fdaca01f2d4608940764dc734eab5f51dfee4c87"
         },
         {
           "name": "regensburg:build",
-          "value": "41606428409-1"
+          "value": "42006097003-1"
         },
         {
           "name": "sbom:source-state",
@@ -28,11 +28,11 @@
         }
       ]
     },
-    "timestamp": "2026-11-03T08:51:23Z",
+    "timestamp": "2026-11-05T09:53:14Z",
     "properties": [
       {
         "name": "regensburg:release-source",
-        "value": "eb15ab3817609445bb64ca2332d2b6bc39d328f2"
+        "value": "fdaca01f2d4608940764dc734eab5f51dfee4c87"
       },
       {
         "name": "regensburg:release-inventory",
@@ -40,7 +40,7 @@
       },
       {
         "name": "regensburg:image-digest",
-        "value": "sha256:76386324c2532baa5e9c4767379d6a4ccad8494b808c050bb34723c1d16afb10"
+        "value": "sha256:25b7d24a098e4e1d9f7f3b050cc955ad394958a61f3fec0460ab2c4831456fd9"
       }
     ]
   },
@@ -58,7 +58,7 @@
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "480fd87e3a1f1f8987f54ee6e68547560e2743f6269bbddfbf6e26996c51f3db"
+          "content": "babb594c20e378fa1e4b08ffab77628b944d625814a8aefa210fa635bdc0a0be"
         }
       ]
     },
@@ -100,7 +100,7 @@
   ],
   "dependencies": [
     {
-      "ref": "regensburg:matomo:build-41606428409-1",
+      "ref": "regensburg:matomo:build-42006097003-1",
       "dependsOn": [
         "docker:matomo:5.14.2-apache",
         "pkg:github/dominik-th/matomo-plugin-LoginOIDC@5.0.0",
@@ -108,5 +108,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:d60e53cd-7219-5ba9-84c4-527755c5a792"
+  "serialNumber": "urn:uuid:9fdd71ac-f9e1-5502-903f-40f52be20a9d"
 }
