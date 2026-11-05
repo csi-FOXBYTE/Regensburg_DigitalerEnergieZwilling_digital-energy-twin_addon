@@ -12,7 +12,7 @@ ENV = Environment(undefined=StrictUndefined)
 ENV.filters["bool"] = lambda value: value if isinstance(value, bool) else str(value).strip().lower() in ("yes", "on", "1", "true")
 
 
-def render_pod():
+def render_pod(**overrides):
     template = ENV.from_string((ROOT / "templates/digital_energy_twin_backend_deploy.yaml.j2").read_text())
     deployment = yaml.safe_load(template.render({
         "digital_energy_twin_backend_image": "backend@sha256:" + "b" * 64,
@@ -24,6 +24,8 @@ def render_pod():
         "digital_energy_twin_admin_direct_host": "admin", "digital_energy_twin_oidc_client_id": "dez",
         "digital_energy_twin_backend_cors_additional_origins": "",
         "inv_access": {"platform": {"hostname": "https://idm"}, "tenant": {"realm_name": "dez"}},
+        "digital_energy_twin_smtp_secret_name": "smtp", "inv_email": {"email_from": "noreply@example.test"},
+        **overrides,
     }))
     return deployment["spec"]["template"]["spec"]
 
@@ -65,3 +67,15 @@ class BackendSecurityContextTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BackendMailEnvTest(unittest.TestCase):
+    def test_feedback_mail_uses_the_variables_the_backend_reads(self):
+        backend = next(c for c in render_pod(digital_energy_twin_feedback_mail_to="feedback@example.test")["containers"]
+                       if c["name"] == "backend")
+        env = {e["name"]: e.get("value") for e in backend["env"]}
+        # apps/backend/src/feedback/feedback.service.ts reads MAIL_FROM and FEEDBACK_MAIL_TO.
+        self.assertEqual(env["MAIL_FROM"], "noreply@example.test")
+        self.assertEqual(env["FEEDBACK_MAIL_TO"], "feedback@example.test")
+        self.assertIn("SMTP_URL", env)
+        self.assertNotIn("FEEDBACK_MAIL_FROM", env)

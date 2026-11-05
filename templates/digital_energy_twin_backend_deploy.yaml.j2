@@ -129,7 +129,8 @@ spec:
                 secretKeyRef:
                   name: "{{ digital_energy_twin_smtp_secret_name }}"
                   key: SMTP_URL
-            - name: FEEDBACK_MAIL_FROM
+            # The backend reads the sender from MAIL_FROM (apps/backend .env.example).
+            - name: MAIL_FROM
               value: "{{ inv_email.email_from }}"
             - name: FEEDBACK_MAIL_TO
               value: "{{ digital_energy_twin_feedback_mail_to }}"
