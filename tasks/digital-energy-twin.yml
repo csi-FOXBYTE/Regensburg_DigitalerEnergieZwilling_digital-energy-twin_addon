@@ -299,7 +299,8 @@
     fail_msg: "The selected monorepo release is incomplete; prepare it from a completed release manifest."
   when: digital_energy_twin_application_release is defined
 
-# The backend accepts 1 to 9999 days and refuses to start on anything else.
+# The backend accepts 1 to 9999 days and refuses to start on anything else;
+# without the setting the download has no expiry.
 - name: "Digital Energy Twin: Validate the deletion link download TTL"
   ansible.builtin.assert:
     that:
@@ -308,8 +309,8 @@
         and (digital_energy_twin.submission_deletion_token_ttl_days | string) is match('^[1-9][0-9]{0,3}$')
     fail_msg: >-
       inv_addons['digital-energy-twin'].submission_deletion_token_ttl_days must be
-      a whole number of days from 1 to 9999 (default 30).
-  when: digital_energy_twin.submission_deletion_token_ttl_days is defined
+      a whole number of days from 1 to 9999, or unset for no expiry.
+  when: digital_energy_twin.submission_deletion_token_ttl_days is defined and digital_energy_twin.submission_deletion_token_ttl_days is not none
 
 # The backend (Fastify default bodyLimit) refuses bodies over 1 MiB by closing
 # the connection, which APISIX reports as 502. The gateway answers them with 413
@@ -360,7 +361,7 @@
     digital_energy_twin_altcha_secret_name: "digital-energy-twin-altcha"
     digital_energy_twin_session_check_ttl: "{{ digital_energy_twin.session_check_ttl | default(5) | int }}"
     digital_energy_twin_feedback_mail_to: "{{ digital_energy_twin.feedback_mail_to | default('') | trim }}"
-    digital_energy_twin_submission_deletion_token_ttl_days: "{{ digital_energy_twin.submission_deletion_token_ttl_days | default(30) | int }}"
+    digital_energy_twin_submission_deletion_token_ttl_days: "{{ digital_energy_twin.submission_deletion_token_ttl_days | default('', true) }}"
     digital_energy_twin_api_max_body_size: "{{ digital_energy_twin.api_max_body_size | default(1048576) | int }}"
     digital_energy_twin_backend_port: "{{ digital_energy_twin.backend_port | default(5000) | int }}"
     digital_energy_twin_admin_port: "{{ digital_energy_twin.admin_port | default(8080) | int }}"

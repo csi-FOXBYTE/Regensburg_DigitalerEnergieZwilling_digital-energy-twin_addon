@@ -48,17 +48,19 @@ def render_backend(ttl):
 
 
 class DeletionLinkTtlTest(unittest.TestCase):
-    def test_defaults_to_30_days(self):
-        self.assertEqual(default_ttl({}), "30")
+    def test_defaults_to_no_expiry(self):
+        self.assertEqual(default_ttl({}), "")
+        self.assertEqual(default_ttl({SETTING: None}), "")
         self.assertEqual(default_ttl({SETTING: 7}), "7")
         self.assertEqual(default_ttl({SETTING: "90"}), "90")
         inventory = yaml.safe_load((ROOT / "default_inventory.yml").read_text())
         addon = inventory["all"]["children"]["controller"]["vars"]["inv_addons"]["digital-energy-twin"]
-        self.assertEqual(addon[SETTING], 30)
+        self.assertNotIn(SETTING, addon)
 
     def test_validation_accepts_only_what_the_backend_accepts(self):
         validation = task("Validate the deletion link download TTL")
-        self.assertEqual(validation["when"], f"digital_energy_twin.{SETTING} is defined")
+        self.assertEqual(validation["when"],
+                         f"digital_energy_twin.{SETTING} is defined and digital_energy_twin.{SETTING} is not none")
         that = validation["ansible.builtin.assert"]["that"]
         for value in (1, 30, "30", 9999, 0, -1, 10000, "", "abc", "30d", " 30", 1.5, 30.0, True, False, None, [30]):
             with self.subTest(value=value):
@@ -72,6 +74,9 @@ class DeletionLinkTtlTest(unittest.TestCase):
     def test_backend_gets_the_ttl(self):
         self.assertEqual(render_backend(30)["SUBMISSION_DELETION_TOKEN_TTL_DAYS"], "30")
         self.assertEqual(render_backend("7")["SUBMISSION_DELETION_TOKEN_TTL_DAYS"], "7")
+
+    def test_backend_gets_no_ttl_without_the_setting(self):
+        self.assertNotIn("SUBMISSION_DELETION_TOKEN_TTL_DAYS", render_backend(""))
 
 
 if __name__ == "__main__":

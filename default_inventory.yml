@@ -43,9 +43,10 @@ all:
               # data_size: "5Gi"
               # db_size: "10Gi"
               # backup: {enable: true, target: pvc, schedule: "30 2 * * *", keep_days: 14, size: "10Gi"}
-            # Days after submission until the deletion link stops serving the
-            # data download (1 to 9999). Deleting stays possible.
-            submission_deletion_token_ttl_days: 30
+            # Optional: days after submission until the deletion link stops
+            # serving the data download (1 to 9999). Unset: no expiry.
+            # Checking the status and deleting stay possible either way.
+            # submission_deletion_token_ttl_days: 365
             # Largest request body in bytes that APISIX passes to the backend API
             # (1 to 1048576, the backend's own limit); larger ones get 413.
             api_max_body_size: 1048576

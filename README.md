@@ -198,16 +198,29 @@ address_database_url: "https://tiles.example.com/det-rg-addresses.sqlite"
 
 ### `submission_deletion_token_ttl_days`
 
-Days after a submission until its deletion link stops serving the data
-download. The addon sets it as `SUBMISSION_DELETION_TOKEN_TTL_DAYS` on the
-backend. Default `30`; it must be a whole number from `1` to `9999`, otherwise
-the playbook stops before deploying (the backend would refuse to start). The
-expiry applies to links issued after the setting is deployed; checking the
-status and deleting the submission stay possible while it is stored. The
-expiry ends only the link, not the stored data.
+Optional. Days after a submission until its deletion link stops serving the
+data download. Unset (the default), the download has no expiry: whoever holds
+the link can download the submission's data, check its status and delete it for
+as long as it is stored. When set, the addon passes it as
+`SUBMISSION_DELETION_TOKEN_TTL_DAYS` to the backend; it must be a whole number
+from `1` to `9999`, otherwise the playbook stops before deploying (the backend
+would refuse to start). The expiry applies to links issued after the setting is
+deployed; checking the status and deleting stay possible. The expiry ends only
+the link, not the stored data.
 
 ```yaml
-submission_deletion_token_ttl_days: 30
+submission_deletion_token_ttl_days: 365
+```
+
+Removing the setting from a deployment that already ran with it does not
+remove `SUBMISSION_DELETION_TOKEN_TTL_DAYS` from the existing backend
+Deployment (the playbook patches it), and submissions created meanwhile keep
+their stored expiry. Remove both once:
+
+```bash
+kubectl -n <namespace> set env deployment/digital-energy-twin-backend SUBMISSION_DELETION_TOKEN_TTL_DAYS-
+# then, against the backend database:
+# UPDATE "Submission" SET "deletionTokenExpiresAt" = NULL WHERE "deletionTokenExpiresAt" IS NOT NULL;
 ```
 
 ## Feedback mail transport
