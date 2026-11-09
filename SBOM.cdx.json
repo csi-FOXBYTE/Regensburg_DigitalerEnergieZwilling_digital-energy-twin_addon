@@ -2,10 +2,10 @@
   "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",
   "bomFormat": "CycloneDX",
   "specVersion": "1.6",
-  "serialNumber": "urn:uuid:21f4405a-2068-5ad7-83b5-958c202b482a",
+  "serialNumber": "urn:uuid:1987b96b-5930-5448-bd6c-71feec4df10d",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-11-05T12:23:59.450143Z",
+    "timestamp": "2026-11-09T10:09:21.737712Z",
     "tools": {
       "components": [
         {
@@ -17,9 +17,9 @@
     },
     "component": {
       "type": "application",
-      "bom-ref": "pkg:generic/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon@1.8.6",
+      "bom-ref": "pkg:generic/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon@1.8.7",
       "name": "Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon",
-      "version": "1.8.6",
+      "version": "1.8.7",
       "description": "Civitas Core addon that deploys and integrates the Regensburg digital energy twin application.",
       "licenses": [
         {
@@ -28,7 +28,7 @@
           }
         }
       ],
-      "purl": "pkg:generic/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon@1.8.6",
+      "purl": "pkg:generic/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon@1.8.7",
       "properties": [
         {
           "name": "sbom:repository",
@@ -52,7 +52,7 @@
         },
         {
           "name": "vcs:commit",
-          "value": "745e6865071c409ec0528b13e5e2caa97c8f3038"
+          "value": "be1a7da1b937d074596e930dafcda70db2406624"
         },
         {
           "name": "sbom:source-state",
@@ -80,7 +80,7 @@
       "type": "container",
       "bom-ref": "oci:ghcr.io/csi-foxbyte/regensburg-web-adminfrontend@sha256:448ade6bc3dfe310f994f60d30f2ab5cca5f936d0b3ab2dc889dbb99e60c41aa",
       "name": "ghcr.io/csi-foxbyte/regensburg-web-adminfrontend",
-      "version": "1.8.6",
+      "version": "1.8.7",
       "scope": "required",
       "licenses": [
         {
@@ -120,7 +120,7 @@
         },
         {
           "name": "regensburg:release-source",
-          "value": "dc6a549d126d2452790429dbd8ef4308929e8905"
+          "value": "9e16ca69c914c685b432ad75e4b4e69bd7ff186b"
         },
         {
           "name": "sbom:child-bom-path",
@@ -128,7 +128,7 @@
         },
         {
           "name": "sbom:child-bom-link",
-          "value": "urn:cdx:6dc261f0-7360-51d0-8914-529c52bf875c/1"
+          "value": "urn:cdx:6d781d32-fafb-5e89-bc7d-bde1aef3b40d/1"
         },
         {
           "name": "sbom:release-repository",
@@ -138,31 +138,31 @@
       "externalReferences": [
         {
           "type": "bom",
-          "url": "urn:cdx:6dc261f0-7360-51d0-8914-529c52bf875c/1",
+          "url": "urn:cdx:6d781d32-fafb-5e89-bc7d-bde1aef3b40d/1",
           "comment": "CycloneDX BOM-Link for the verified child SBOM bundled at sboms/admin.cdx.json.",
           "hashes": [
             {
               "alg": "SHA-256",
-              "content": "bcfb33475037bbfc921f7b10fcc8def7d62f9289bbff892cf4657d36d58ea68c"
+              "content": "f2e7f8c7ac43d69428a54bbed362e4ca6ea05271fd9dcd84280fba4729b7e7fb"
             },
             {
               "alg": "SHA-512",
-              "content": "8be906ae073c6849a07046be82adafccaa79564ff6c9001554ef294ffff120a9d9f97bb09ef84025c8be80d66a1e4537d0e26ebf5e00f052f8648bc47253bc0b"
+              "content": "96a684b9f867f4a5de3758961c087631308812fbc15842b9eca2cd7e59a5e60b2dfc9be1f2502196ecd687b2146dae549803efe447d2dbb69d246436aab01f1b"
             }
           ]
         },
         {
           "type": "bom",
-          "url": "https://raw.githubusercontent.com/csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon/v1.8.6/sboms/admin.cdx.json",
+          "url": "https://raw.githubusercontent.com/csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon/v1.8.7/sboms/admin.cdx.json",
           "comment": "Release-pinned download location for the bundled child SBOM.",
           "hashes": [
             {
               "alg": "SHA-256",
-              "content": "bcfb33475037bbfc921f7b10fcc8def7d62f9289bbff892cf4657d36d58ea68c"
+              "content": "f2e7f8c7ac43d69428a54bbed362e4ca6ea05271fd9dcd84280fba4729b7e7fb"
             },
             {
               "alg": "SHA-512",
-              "content": "8be906ae073c6849a07046be82adafccaa79564ff6c9001554ef294ffff120a9d9f97bb09ef84025c8be80d66a1e4537d0e26ebf5e00f052f8648bc47253bc0b"
+              "content": "96a684b9f867f4a5de3758961c087631308812fbc15842b9eca2cd7e59a5e60b2dfc9be1f2502196ecd687b2146dae549803efe447d2dbb69d246436aab01f1b"
             }
           ]
         }
@@ -170,9 +170,9 @@
     },
     {
       "type": "container",
-      "bom-ref": "oci:ghcr.io/csi-foxbyte/regensburg-web-frontend@sha256:109226a8087199a2164dc4edc4bd365e68459c3f9525d8e48a6195a04d254a48",
+      "bom-ref": "oci:ghcr.io/csi-foxbyte/regensburg-web-frontend@sha256:dfdeccddcac33069dd55a6a8ed0f2eea727e8b085fecfb2ef7ea01c206ee3c28",
       "name": "ghcr.io/csi-foxbyte/regensburg-web-frontend",
-      "version": "1.8.6",
+      "version": "1.8.7",
       "scope": "required",
       "licenses": [
         {
@@ -204,15 +204,15 @@
         },
         {
           "name": "regensburg:image-digest",
-          "value": "sha256:109226a8087199a2164dc4edc4bd365e68459c3f9525d8e48a6195a04d254a48"
+          "value": "sha256:dfdeccddcac33069dd55a6a8ed0f2eea727e8b085fecfb2ef7ea01c206ee3c28"
         },
         {
           "name": "regensburg:build",
-          "value": "42025149733-1"
+          "value": "42597012345-1"
         },
         {
           "name": "regensburg:release-source",
-          "value": "dc6a549d126d2452790429dbd8ef4308929e8905"
+          "value": "9e16ca69c914c685b432ad75e4b4e69bd7ff186b"
         },
         {
           "name": "sbom:child-bom-path",
@@ -220,7 +220,7 @@
         },
         {
           "name": "sbom:child-bom-link",
-          "value": "urn:cdx:8951967f-a91f-51a9-975a-5a726548be67/1"
+          "value": "urn:cdx:e0eca9f4-38c0-5d2c-aa82-17e53b9c4a0e/1"
         },
         {
           "name": "sbom:release-repository",
@@ -230,31 +230,31 @@
       "externalReferences": [
         {
           "type": "bom",
-          "url": "urn:cdx:8951967f-a91f-51a9-975a-5a726548be67/1",
+          "url": "urn:cdx:e0eca9f4-38c0-5d2c-aa82-17e53b9c4a0e/1",
           "comment": "CycloneDX BOM-Link for the verified child SBOM bundled at sboms/public.cdx.json.",
           "hashes": [
             {
               "alg": "SHA-256",
-              "content": "c509d89a21e2cef74bf87c053943bacfbed9dbd060a0a75e7be9db2dfea7001f"
+              "content": "c8ed1537e34bc05e1ae3bc2d2a3ee32171b6834289299a6f4b49deff86936e0e"
             },
             {
               "alg": "SHA-512",
-              "content": "892cfdadf68ee32bd9a55bb95f7993aa92bbe5ebfbced8542b4e73856c5f69269a71a46a4186c3e28b75058e158d9e3593b4ded56ffbf077ce437dd6864e53ab"
+              "content": "5703d3915d7e29e2f09e8f4fd847ec3e1b986c928390c67eca6afd99d2aba19f162e30d941141cf5ecd31ed270a4ea064ac75bba70d68d9fe94ae4937bd1adaf"
             }
           ]
         },
         {
           "type": "bom",
-          "url": "https://raw.githubusercontent.com/csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon/v1.8.6/sboms/public.cdx.json",
+          "url": "https://raw.githubusercontent.com/csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon/v1.8.7/sboms/public.cdx.json",
           "comment": "Release-pinned download location for the bundled child SBOM.",
           "hashes": [
             {
               "alg": "SHA-256",
-              "content": "c509d89a21e2cef74bf87c053943bacfbed9dbd060a0a75e7be9db2dfea7001f"
+              "content": "c8ed1537e34bc05e1ae3bc2d2a3ee32171b6834289299a6f4b49deff86936e0e"
             },
             {
               "alg": "SHA-512",
-              "content": "892cfdadf68ee32bd9a55bb95f7993aa92bbe5ebfbced8542b4e73856c5f69269a71a46a4186c3e28b75058e158d9e3593b4ded56ffbf077ce437dd6864e53ab"
+              "content": "5703d3915d7e29e2f09e8f4fd847ec3e1b986c928390c67eca6afd99d2aba19f162e30d941141cf5ecd31ed270a4ea064ac75bba70d68d9fe94ae4937bd1adaf"
             }
           ]
         }
@@ -262,9 +262,9 @@
     },
     {
       "type": "container",
-      "bom-ref": "oci:ghcr.io/csi-foxbyte/regensburg-web-backend@sha256:365c8f8feeaaf67eb1842dea9d45ff16c30923f32caf29d207b058c6f5e53d5c",
+      "bom-ref": "oci:ghcr.io/csi-foxbyte/regensburg-web-backend@sha256:5825689d3ba9fe4b1b70876e2e725426e159390ceea05c3337edf7814645e478",
       "name": "ghcr.io/csi-foxbyte/regensburg-web-backend",
-      "version": "1.8.6",
+      "version": "1.8.7",
       "scope": "required",
       "licenses": [
         {
@@ -296,15 +296,15 @@
         },
         {
           "name": "regensburg:image-digest",
-          "value": "sha256:365c8f8feeaaf67eb1842dea9d45ff16c30923f32caf29d207b058c6f5e53d5c"
+          "value": "sha256:5825689d3ba9fe4b1b70876e2e725426e159390ceea05c3337edf7814645e478"
         },
         {
           "name": "regensburg:build",
-          "value": "42025149733-1"
+          "value": "42597012345-1"
         },
         {
           "name": "regensburg:release-source",
-          "value": "dc6a549d126d2452790429dbd8ef4308929e8905"
+          "value": "9e16ca69c914c685b432ad75e4b4e69bd7ff186b"
         },
         {
           "name": "sbom:child-bom-path",
@@ -312,7 +312,7 @@
         },
         {
           "name": "sbom:child-bom-link",
-          "value": "urn:cdx:e880a40c-68a5-5309-9952-935f63367fe0/1"
+          "value": "urn:cdx:b858baf3-72f5-5b72-8284-043304bed256/1"
         },
         {
           "name": "sbom:release-repository",
@@ -322,31 +322,31 @@
       "externalReferences": [
         {
           "type": "bom",
-          "url": "urn:cdx:e880a40c-68a5-5309-9952-935f63367fe0/1",
+          "url": "urn:cdx:b858baf3-72f5-5b72-8284-043304bed256/1",
           "comment": "CycloneDX BOM-Link for the verified child SBOM bundled at sboms/backend.cdx.json.",
           "hashes": [
             {
               "alg": "SHA-256",
-              "content": "a857629c1436b548b0e6a8cf62bb8ddc9e94eb02b81c4fcb0fc5f4176aa8a348"
+              "content": "7340e1638db22f3c6cb12d5cd557f7985f2e93d0b06c01a800a0c6675e001112"
             },
             {
               "alg": "SHA-512",
-              "content": "35b0f32937d7d405c5df3ef3f1dfcd4ebef85a35bee316c7868aa0ba8989d481c3f4eaa2a5d80ce854b5d09b104f3ae14ca129270b76e0f38ed1ac7db99de171"
+              "content": "3ca44706542a34f07357e1cd7969230145fa188d9e00c90d621e06bb877302788e3ffa84b9230e9d697422e43b77cf91101ed1b2ba355db1cb0b9d72254dbaba"
             }
           ]
         },
         {
           "type": "bom",
-          "url": "https://raw.githubusercontent.com/csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon/v1.8.6/sboms/backend.cdx.json",
+          "url": "https://raw.githubusercontent.com/csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon/v1.8.7/sboms/backend.cdx.json",
           "comment": "Release-pinned download location for the bundled child SBOM.",
           "hashes": [
             {
               "alg": "SHA-256",
-              "content": "a857629c1436b548b0e6a8cf62bb8ddc9e94eb02b81c4fcb0fc5f4176aa8a348"
+              "content": "7340e1638db22f3c6cb12d5cd557f7985f2e93d0b06c01a800a0c6675e001112"
             },
             {
               "alg": "SHA-512",
-              "content": "35b0f32937d7d405c5df3ef3f1dfcd4ebef85a35bee316c7868aa0ba8989d481c3f4eaa2a5d80ce854b5d09b104f3ae14ca129270b76e0f38ed1ac7db99de171"
+              "content": "3ca44706542a34f07357e1cd7969230145fa188d9e00c90d621e06bb877302788e3ffa84b9230e9d697422e43b77cf91101ed1b2ba355db1cb0b9d72254dbaba"
             }
           ]
         }
@@ -429,7 +429,7 @@
         },
         {
           "type": "bom",
-          "url": "https://raw.githubusercontent.com/csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon/v1.8.6/sboms/matomo.cdx.json",
+          "url": "https://raw.githubusercontent.com/csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon/v1.8.7/sboms/matomo.cdx.json",
           "comment": "Release-pinned download location for the bundled child SBOM.",
           "hashes": [
             {
@@ -915,7 +915,7 @@
   ],
   "dependencies": [
     {
-      "ref": "pkg:generic/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon@1.8.6",
+      "ref": "pkg:generic/Regensburg_DigitalerEnergieZwilling_digital-energy-twin_addon@1.8.7",
       "dependsOn": [
         "component:apache-apisix@not-pinned",
         "component:cert-manager@not-pinned",
@@ -928,8 +928,8 @@
         "component:traefik@not-pinned",
         "oci:docker.io/library/mariadb@sha256:c4124d1afa875e47f2892edf26b482fa54f796e2f342d3717a04ca091a22a9bd",
         "oci:ghcr.io/csi-foxbyte/regensburg-web-adminfrontend@sha256:448ade6bc3dfe310f994f60d30f2ab5cca5f936d0b3ab2dc889dbb99e60c41aa",
-        "oci:ghcr.io/csi-foxbyte/regensburg-web-backend@sha256:365c8f8feeaaf67eb1842dea9d45ff16c30923f32caf29d207b058c6f5e53d5c",
-        "oci:ghcr.io/csi-foxbyte/regensburg-web-frontend@sha256:109226a8087199a2164dc4edc4bd365e68459c3f9525d8e48a6195a04d254a48",
+        "oci:ghcr.io/csi-foxbyte/regensburg-web-backend@sha256:5825689d3ba9fe4b1b70876e2e725426e159390ceea05c3337edf7814645e478",
+        "oci:ghcr.io/csi-foxbyte/regensburg-web-frontend@sha256:dfdeccddcac33069dd55a6a8ed0f2eea727e8b085fecfb2ef7ea01c206ee3c28",
         "oci:ghcr.io/csi-foxbyte/regensburg-web-matomo@sha256:25b7d24a098e4e1d9f7f3b050cc955ad394958a61f3fec0460ab2c4831456fd9",
         "pkg:ansible/kubernetes.core@not-pinned",
         "pkg:pypi/ansible-core@not-pinned",
@@ -939,19 +939,19 @@
     {
       "ref": "oci:ghcr.io/csi-foxbyte/regensburg-web-adminfrontend@sha256:448ade6bc3dfe310f994f60d30f2ab5cca5f936d0b3ab2dc889dbb99e60c41aa",
       "dependsOn": [
-        "urn:cdx:6dc261f0-7360-51d0-8914-529c52bf875c/1#regensburg%3Aadminfrontend%3Abuild-42025149733-1"
+        "urn:cdx:6d781d32-fafb-5e89-bc7d-bde1aef3b40d/1#regensburg%3Aadminfrontend%3Abuild-42025149733-1"
       ]
     },
     {
-      "ref": "oci:ghcr.io/csi-foxbyte/regensburg-web-frontend@sha256:109226a8087199a2164dc4edc4bd365e68459c3f9525d8e48a6195a04d254a48",
+      "ref": "oci:ghcr.io/csi-foxbyte/regensburg-web-frontend@sha256:dfdeccddcac33069dd55a6a8ed0f2eea727e8b085fecfb2ef7ea01c206ee3c28",
       "dependsOn": [
-        "urn:cdx:8951967f-a91f-51a9-975a-5a726548be67/1#regensburg%3Afrontend%3Abuild-42025149733-1"
+        "urn:cdx:e0eca9f4-38c0-5d2c-aa82-17e53b9c4a0e/1#regensburg%3Afrontend%3Abuild-42597012345-1"
       ]
     },
     {
-      "ref": "oci:ghcr.io/csi-foxbyte/regensburg-web-backend@sha256:365c8f8feeaaf67eb1842dea9d45ff16c30923f32caf29d207b058c6f5e53d5c",
+      "ref": "oci:ghcr.io/csi-foxbyte/regensburg-web-backend@sha256:5825689d3ba9fe4b1b70876e2e725426e159390ceea05c3337edf7814645e478",
       "dependsOn": [
-        "urn:cdx:e880a40c-68a5-5309-9952-935f63367fe0/1#regensburg%3Abackend%3Abuild-42025149733-1"
+        "urn:cdx:b858baf3-72f5-5b72-8284-043304bed256/1#regensburg%3Abackend%3Abuild-42597012345-1"
       ]
     },
     {

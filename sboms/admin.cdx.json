@@ -2,10 +2,10 @@
   "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",
   "bomFormat": "CycloneDX",
   "specVersion": "1.6",
-  "serialNumber": "urn:uuid:6dc261f0-7360-51d0-8914-529c52bf875c",
+  "serialNumber": "urn:uuid:6d781d32-fafb-5e89-bc7d-bde1aef3b40d",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-11-05T12:11:43.000Z",
+    "timestamp": "2026-11-09T09:54:35.000Z",
     "lifecycles": [
       {
         "phase": "build"
@@ -92,7 +92,7 @@
       },
       {
         "name": "regensburg:release-source",
-        "value": "dc6a549d126d2452790429dbd8ef4308929e8905"
+        "value": "9e16ca69c914c685b432ad75e4b4e69bd7ff186b"
       },
       {
         "name": "regensburg:release-inventory",

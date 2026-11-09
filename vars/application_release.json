@@ -1,27 +1,27 @@
 {
   "digital_energy_twin_application_release": {
     "repository": "csi-FOXBYTE/Regensburg_DigitalerEnergieZwilling_MonoRepo",
-    "tag": "v1.8.6",
+    "tag": "v1.8.7",
     "manifest": {
       "schema": 2,
-      "appVersion": "1.8.6",
-      "previousVersion": "1.8.5",
-      "sourceCommit": "dc6a549d126d2452790429dbd8ef4308929e8905",
-      "runId": "42025149733",
+      "appVersion": "1.8.7",
+      "previousVersion": "1.8.6",
+      "sourceCommit": "9e16ca69c914c685b432ad75e4b4e69bd7ff186b",
+      "runId": "42597012345",
       "frontend": {
         "image": "ghcr.io/csi-foxbyte/regensburg-web-frontend",
-        "fingerprint": "sha256:1921ffa44ea60676142767b24a10f9443ebd9f7deef0c3663f5fab5f16c0d67a",
-        "digest": "sha256:109226a8087199a2164dc4edc4bd365e68459c3f9525d8e48a6195a04d254a48",
-        "sourceCommit": "dc6a549d126d2452790429dbd8ef4308929e8905",
-        "build": "42025149733-1",
+        "fingerprint": "sha256:70a42f7832f99aca67783319f7f9d809ea21e98352a246ec5297cfd859cec619",
+        "digest": "sha256:dfdeccddcac33069dd55a6a8ed0f2eea727e8b085fecfb2ef7ea01c206ee3c28",
+        "sourceCommit": "9e16ca69c914c685b432ad75e4b4e69bd7ff186b",
+        "build": "42597012345-1",
         "platform": "linux/amd64",
         "baseImage": "node:24.22.2-bookworm-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9",
         "runtimeBaseImage": "nginxinc/nginx-unprivileged:1.30.6-alpine@sha256:f5116ed4606f3eb015dd4a8e28cb9b351476dc0ad4bc6e9f93b19cec130cdf03",
         "sbom": {
           "path": "/usr/share/regensburg/SBOM.cdx.json",
-          "sha256": "sha256:4b3a16fc2ad4a642e4494e92a6085ba4344d254c07d2c74794394c1aae6b94d3",
-          "version": "build-42025149733-1",
-          "sourceCommit": "dc6a549d126d2452790429dbd8ef4308929e8905"
+          "sha256": "sha256:249b04f200efc06983c07d0e63cd599678704f808be8053126133e77b24713ca",
+          "version": "build-42597012345-1",
+          "sourceCommit": "9e16ca69c914c685b432ad75e4b4e69bd7ff186b"
         }
       },
       "adminfrontend": {
@@ -42,28 +42,28 @@
       },
       "backend": {
         "image": "ghcr.io/csi-foxbyte/regensburg-web-backend",
-        "fingerprint": "sha256:ae55fb0a4ac15bf9abeb343873ef408433053021f4552eeab2defc2861a5ea22",
-        "digest": "sha256:365c8f8feeaaf67eb1842dea9d45ff16c30923f32caf29d207b058c6f5e53d5c",
-        "sourceCommit": "dc6a549d126d2452790429dbd8ef4308929e8905",
-        "build": "42025149733-1",
+        "fingerprint": "sha256:6cf3ee5188a9ce26095b2f669c6765a7aabd3b19c497d8c5640527aa1d59e013",
+        "digest": "sha256:5825689d3ba9fe4b1b70876e2e725426e159390ceea05c3337edf7814645e478",
+        "sourceCommit": "9e16ca69c914c685b432ad75e4b4e69bd7ff186b",
+        "build": "42597012345-1",
         "platform": "linux/amd64",
-        "baseImage": "node:24.22.2-alpine3.24@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85",
-        "runtimeBaseImage": "alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a",
+        "baseImage": "node:24.22.2-alpine3.24@sha256:a34ab6d7f6f4813f4d0c5469d74685604b962fbdbf5793a7bc7b4998ecb867c8",
+        "runtimeBaseImage": "alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf",
         "sbom": {
           "path": "/usr/share/regensburg/SBOM.cdx.json",
-          "sha256": "sha256:367aa7450ae2776fac3e5623f6da09cd1afb3308996113b33f335b534766db55",
-          "version": "build-42025149733-1",
-          "sourceCommit": "dc6a549d126d2452790429dbd8ef4308929e8905"
+          "sha256": "sha256:5aa72f9e84e349be922d5043cf3bba8f8f3d4bbfff278191672c94948ffedc02",
+          "version": "build-42597012345-1",
+          "sourceCommit": "9e16ca69c914c685b432ad75e4b4e69bd7ff186b"
         }
       },
       "sboms": {
         "schema": 1,
-        "sourceCommit": "dc6a549d126d2452790429dbd8ef4308929e8905",
+        "sourceCommit": "9e16ca69c914c685b432ad75e4b4e69bd7ff186b",
         "images": {
           "frontend": {
-            "digest": "sha256:109226a8087199a2164dc4edc4bd365e68459c3f9525d8e48a6195a04d254a48",
-            "sourceCommit": "dc6a549d126d2452790429dbd8ef4308929e8905",
-            "build": "42025149733-1"
+            "digest": "sha256:dfdeccddcac33069dd55a6a8ed0f2eea727e8b085fecfb2ef7ea01c206ee3c28",
+            "sourceCommit": "9e16ca69c914c685b432ad75e4b4e69bd7ff186b",
+            "build": "42597012345-1"
           },
           "adminfrontend": {
             "digest": "sha256:448ade6bc3dfe310f994f60d30f2ab5cca5f936d0b3ab2dc889dbb99e60c41aa",
@@ -71,19 +71,19 @@
             "build": "42025149733-1"
           },
           "backend": {
-            "digest": "sha256:365c8f8feeaaf67eb1842dea9d45ff16c30923f32caf29d207b058c6f5e53d5c",
-            "sourceCommit": "dc6a549d126d2452790429dbd8ef4308929e8905",
-            "build": "42025149733-1"
+            "digest": "sha256:5825689d3ba9fe4b1b70876e2e725426e159390ceea05c3337edf7814645e478",
+            "sourceCommit": "9e16ca69c914c685b432ad75e4b4e69bd7ff186b",
+            "build": "42597012345-1"
           }
         },
         "files": {
-          "source.cdx.json": "sha256:f41618f0e62582438fad142182fd8507fa20e9732fca2ac1405c3ea706428081",
-          "frontend.cdx.json": "sha256:c509d89a21e2cef74bf87c053943bacfbed9dbd060a0a75e7be9db2dfea7001f",
-          "frontend-runtime.cdx.json": "sha256:6d3d05b7b99b910600dfbf7f1e5b5c51bd66fc9fcf425353b9efa3303255a4f4",
-          "adminfrontend.cdx.json": "sha256:bcfb33475037bbfc921f7b10fcc8def7d62f9289bbff892cf4657d36d58ea68c",
-          "adminfrontend-runtime.cdx.json": "sha256:e3a4aafc3fef28f09b4e55c404ad6c0531d6a16cecb9b0fb3e270f01cd123a67",
-          "backend.cdx.json": "sha256:a857629c1436b548b0e6a8cf62bb8ddc9e94eb02b81c4fcb0fc5f4176aa8a348",
-          "backend-runtime.cdx.json": "sha256:9bedadf400be9fa426a882abc0c31ee19c940edfe957ddfa3ac3ef22dfcbae85"
+          "source.cdx.json": "sha256:7872f17a25a4c1def561cf15c8d9fb89a0f330c9a8e8a190736e7c92172441dc",
+          "frontend.cdx.json": "sha256:c8ed1537e34bc05e1ae3bc2d2a3ee32171b6834289299a6f4b49deff86936e0e",
+          "frontend-runtime.cdx.json": "sha256:02aab7eca75e2729dc8bda5f0f853716b2bb4ba544556c208d1386b34ac7ac9a",
+          "adminfrontend.cdx.json": "sha256:f2e7f8c7ac43d69428a54bbed362e4ca6ea05271fd9dcd84280fba4729b7e7fb",
+          "adminfrontend-runtime.cdx.json": "sha256:9c73aea68a8e177820c8a2a3ff19504b0c29fac89942c99636255df952776abe",
+          "backend.cdx.json": "sha256:7340e1638db22f3c6cb12d5cd557f7985f2e93d0b06c01a800a0c6675e001112",
+          "backend-runtime.cdx.json": "sha256:17420d2366d824eecd7737bb1fd741f0ae6bf924a3c6354f1bff14bd8d64e45f"
         }
       }
     }
