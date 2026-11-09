@@ -214,14 +214,15 @@ submission_deletion_token_ttl_days: 365
 
 Removing the setting from a deployment that already ran with it does not
 remove `SUBMISSION_DELETION_TOKEN_TTL_DAYS` from the existing backend
-Deployment (the playbook patches it), and submissions created meanwhile keep
-their stored expiry. Remove both once:
+Deployment, because the playbook patches it. Remove it once:
 
 ```bash
 kubectl -n <namespace> set env deployment/digital-energy-twin-backend SUBMISSION_DELETION_TOKEN_TTL_DAYS-
-# then, against the backend database:
-# UPDATE "Submission" SET "deletionTokenExpiresAt" = NULL WHERE "deletionTokenExpiresAt" IS NOT NULL;
 ```
+
+Without the variable, the backend (from application release v1.8.7) clears the
+expiries stored while it was set on its next start, so those links download
+again.
 
 ## Feedback mail transport
 
